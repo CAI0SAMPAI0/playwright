@@ -5,7 +5,7 @@ a = Analysis(
     ['app.py'],
     pathex=[],
     binaries=[],
-    datas=[('ui', 'ui'), ('core', 'core'), ('data', 'data'), ('resources', 'resources')],
+    datas=[('core', 'core'), ('ui', 'ui'), ('data', 'data'), ('resources', 'resources')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -32,7 +32,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    uac_admin=True,
     icon=['resources\\Taty_s-English-Logo.ico'],
 )
 coll = COLLECT(

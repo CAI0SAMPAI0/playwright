@@ -2,16 +2,19 @@ import os
 import sys
 import customtkinter as ctk
 import traceback
+import threading
 from datetime import datetime, timedelta
 from tkinter import filedialog, messagebox
 from tkcalendar import Calendar
 from core.db import db
-from core import automation, windows_scheduler
+from core import automation, windows_scheduler, paths
 from core.automation import contador_execucao 
 import pyperclip
+from core.paths import get_app_base_dir, get_whatsapp_profile_dir
+
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PROFILE_DIR = os.path.join(BASE_DIR, "perfil_bot_whatsapp")
+PROFILE_DIR = get_whatsapp_profile_dir()
 THEME_FILE = os.path.join(BASE_DIR, "data", "theme_pref.txt")
 GEOMETRY_FILE = os.path.join(BASE_DIR, "data", "window_pos.txt")
 
@@ -467,14 +470,58 @@ class App(ctk.CTk):
             dt = datetime.strptime(f"{d} {t}", "%d/%m/%Y %H:%M")
             if dt < datetime.now(): return messagebox.showerror("Erro", "O horário deve ser no futuro.")
             task_name = f"ZapTask_{int(datetime.now().timestamp())}"
-            t_id = db.adicionar(task_name=task_name, target=target, mode=mode, message=message, file_path=self.file_path, scheduled_time=dt)
-            if t_id:
-                json_cfg = {"target": target, "mode": mode, "message": message, "file_path": self.file_path}
-                windows_scheduler.create_task_bat(t_id, task_name, json_cfg)
-                suc, msg = windows_scheduler.create_windows_task(t_id, task_name, t, d)
-                if suc: messagebox.showinfo("Agendado", "Tarefa criada!"); self._carregar_agendamentos(); self._reset_fields()
-                else: messagebox.showerror("Erro", msg)
-        except Exception as e: messagebox.showerror("Erro", str(e))
+
+            t_id = db.adicionar(
+                task_name=task_name, 
+                target=target, 
+                mode=mode, 
+                message=message, 
+                file_path=self.file_path, 
+                scheduled_time=dt
+            )
+
+            if not t_id or t_id == -1:
+                return messagebox.showerror("Erro", "Falha ao salvar no banco de dados")
+        
+            threading.Thread(
+                target=self._criar_tarefa_agendada, 
+                args=(t_id, task_name, target, mode, message, self.file_path, t, d),
+                daemon=True
+            ).start()
+        
+        except Exception as e: 
+            messagebox.showerror("Erro", str(e))
+
+    def _criar_tarefa_agendada(self, t_id, task_name, target, mode, message, file_path, time_str, date_str):
+        """
+        ✅ NOVA FUNÇÃO: Cria tarefa do Windows de forma não-bloqueante
+        """
+        try:
+            json_cfg = {
+                "target": target, 
+                "mode": mode, 
+                "message": message, 
+                "file_path": file_path
+            }
+            
+            # Cria arquivos JSON e BAT
+            windows_scheduler.create_task_bat(t_id, task_name, json_cfg)
+            
+            # Cria tarefa no Agendador do Windows
+            suc, msg = windows_scheduler.create_windows_task(t_id, task_name, time_str, date_str)
+            
+            if suc: 
+                messagebox.showinfo("Agendado", "Tarefa criada com sucesso!")
+                self._carregar_agendamentos()
+                self._reset_fields()
+            else: 
+                # Se falhar, remove do banco
+                db.deletar(t_id)
+                messagebox.showerror("Erro", f"Falha no Agendador do Windows:\n{msg}")
+                
+        except Exception as e:
+            db.deletar(t_id)
+            messagebox.showerror("Erro", f"Erro ao criar agendamento:\n{str(e)}")
 
     def _abrir_calendario_custom(self, target_btn):
         top = ctk.CTkToplevel(self)

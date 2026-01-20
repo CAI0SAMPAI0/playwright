@@ -154,7 +154,7 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
                 target.wait_for(state="visible", timeout=500)
                 target.scroll_into_view_if_needed()
                 target.click(force=True)
-                time.sleep(0.5)
+                time.sleep(1.2)
                 pyperclip.copy(message)
                 page.keyboard.press("Control+V")
                 campo_ok = True
@@ -191,8 +191,8 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
         except: continue
 
     if enviou:
-        time.sleep(15)
-        contador_execucao(incrementar=True)
+        time.sleep(10)
+        #contador_execucao(incrementar=True)
         _log(logger, "🚀 Concluído!")
     else:
         page.keyboard.press("Enter")
@@ -215,8 +215,7 @@ def executar_envio(userdir, target, mode, message=None, file_path=None, logger=N
             pyperclip.copy(message)
             page.keyboard.press("Control+V")
             page.keyboard.press("Enter")
-            time.sleep(5)
-            contador_execucao(incrementar=True)
+            time.sleep(2)
         else:
             enviar_arquivo_com_mensagem(page, file_path, message, logger)
             
