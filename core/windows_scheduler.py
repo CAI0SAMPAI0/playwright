@@ -16,6 +16,7 @@ def create_task_bat(task_id, task_name, json_config):
     
     json_path = scheduled_tasks_dir / f"task_{task_id}.json"
     bat_path = scheduled_tasks_dir / f"task_{task_id}.bat"
+    vbs_path = scheduled_tasks_dir / f"task_{task_id}.vbs" # Caminho do arquivo invisível
     
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(json_config, f, indent=2, ensure_ascii=False)
@@ -41,18 +42,24 @@ exit
 """
     with open(bat_path, 'w', encoding='utf-8') as f:
         f.write(bat_content)
+
+    vbs_content = f'CreateObject("Wscript.Shell").Run "{bat_path}", 0, False'
+    with open(vbs_path, 'w', encoding='utf-8') as f:
+        f.write(vbs_content)
     
-    return str(bat_path)
+    return str(vbs_path)
 
 def create_windows_task(task_id, task_name, schedule_time, schedule_date=None):
-    bat_path = APP_PATH / "scheduled_tasks" / f"task_{task_id}.bat"
+    #bat_path = APP_PATH / "scheduled_tasks" / f"task_{task_id}.bat"
+    vbs_path = APP_PATH / "scheduled_tasks" / f"task_{task_id}.vbs"
+
 
     if not schedule_date:    
         schedule_date = datetime.now().strftime("%d/%m/%Y")
 
     cmd = (
         f'schtasks /create /tn "AutoMessage_{task_id}" '
-        f'/tr "\\"{bat_path}\\"" '
+        f'/tr "\\"{vbs_path}\\"" '
         f'/sc once /st {schedule_time} /sd {schedule_date} '
     )
 
