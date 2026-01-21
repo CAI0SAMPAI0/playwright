@@ -43,7 +43,7 @@ exit
     with open(bat_path, 'w', encoding='utf-8') as f:
         f.write(bat_content)
 
-    vbs_content = f'CreateObject("Wscript.Shell").Run "{bat_path}", 0, False'
+    vbs_content = f'CreateObject("Wscript.Shell").Run chr(34) & "{bat_path}" & chr(34), 0, False'
     with open(vbs_path, 'w', encoding='utf-8') as f:
         f.write(vbs_content)
     
@@ -59,7 +59,7 @@ def create_windows_task(task_id, task_name, schedule_time, schedule_date=None):
 
     cmd = (
         f'schtasks /create /tn "AutoMessage_{task_id}" '
-        f'/tr "\\"{vbs_path}\\"" '
+        f'/tr "wscript.exe \\"{vbs_path}\\"" '
         f'/sc once /st {schedule_time} /sd {schedule_date} '
     )
 

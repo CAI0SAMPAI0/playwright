@@ -2,11 +2,49 @@ import multiprocessing
 import sys
 import os
 import io
+import tkinter as tk
+from tkinter import messagebox
 from datetime import datetime
+import subprocess
+from playwright.sync_api import sync_playwright
+
+def assegurar_navegador():
+    """Verifica se o Chromium está instalado, se não, exibe aviso e instala."""
+    if "--parent-process" in sys.argv or "install" in sys.argv:
+        return
+    
+    try:
+        with sync_playwright() as p:
+            p.chromium.launch(headless=True).close()
+    except Exception:
+        # Criar uma janela de aviso temporária
+        root = tk.Tk()
+        root.title("Study Practices - Configuração")
+        root.geometry("400x150")
+        # Centralizar a janela
+        root.eval('tk::PlaceWindow . center')
+        
+        label = tk.Label(root, text="Preparando navegador pela primeira vez...\nIsso pode levar um minuto, por favor aguarde.", 
+                         padx=20, pady=20, font=("Helvetica", 10))
+        label.pack()
+        
+        root.update() # Força a exibição da janela
+        
+        try:
+            # Comando para instalar apenas o chromium
+            subprocess.run(
+                [sys.executable, "-m", "playwright", "install", "chromium"],
+                creationflags=subprocess.CREATE_NO_WINDOW,
+                capture_output=True)
+        finally:
+            root.destroy() # Fecha o aviso após terminar
 
 # --- 1. BLOQUEIO OBRIGATÓRIO ---
 if __name__ == "__main__":
     multiprocessing.freeze_support()
+
+    if len(sys.argv) > 1 and sys.argv[1] == "-m":
+        sys.exit(0)
 
     # --- 2. STDOUT SEGURO (APENAS CONSOLE) ---
     if sys.stdout and hasattr(sys.stdout, "buffer"):
@@ -85,6 +123,7 @@ if __name__ == "__main__":
     # --- 6. MODO GUI ---
     else:
         try:
+            assegurar_navegador()
             from ui.main_window import App
             app = App()
             app.mainloop()
