@@ -26,13 +26,6 @@ def realizar_build():
         print("\n[ERRO] Falha ao executar o PyInstaller. Verifique se o app.spec está na raiz.")
         return
 
-    # 2. Copia o arquivo Instruções para a raiz do pacote (fora da pasta do App)
-    if os.path.exists(arquivo_instrucoes):
-        shutil.copy(arquivo_instrucoes, pasta_dist_raiz)
-        print(f"[OK] {arquivo_instrucoes} adicionado ao pacote.")
-    else:
-        print(f"[AVISO] {arquivo_instrucoes} não encontrado. O ZIP será criado sem ele.")
-
     # 3. Cria o arquivo ZIP
     print(f"--- Criando arquivo ZIP final: {arquivo_zip_final} ---")
     if os.path.exists(arquivo_zip_final):

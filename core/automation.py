@@ -126,37 +126,44 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
             "css=#app > div > div > span:nth-child(8) > div > ul > div > div > div:nth-child(1) > li > div > span",
             'css=#app > div > div > div:nth-child(11) > div > div > div.xu96u03.xm80bdy.x10l6tqk.x13vifvy.xoz0ns6.x1gslohp > div.html-div.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl > div > div > div > div > div.x78zum5.xdt5ytf.x1iyjqo2.x1n2onr6 > div:nth-child(1) > div.x6s0dn4.xlr9sxt.xvvg52n.xwd4zgb.xq8v1ta.x78zum5.xu0aao5.xh8yej3 > div.x78zum5.xdt5ytf.x1iyjqo2.xeuugli.x6ikm8r.x10wlt62.xde1mab > span',
             'xpath=//*[@id="app"]/div/div/div[4]/div/div/div[1]/div[1]/div/div/div/div/div[1]/div[1]/div[1]/div[2]/span',
-            'xpath=/html/body/div[1]/div/div/div/div/div[4]/div/div/div[1]/div[1]/div/div/div/div/div[1]/div[1]/div[1]/div[2]/span'
+            'xpath=/html/body/div[1]/div/div/div/div/div[4]/div/div/div[1]/div[1]/div/div/div/div/div[1]/div[1]/div[1]/div[2]/span',
             "xpath=//*[@id='app']/div/div/span[6]/div/ul/div/div/div[1]/li/div/span",
             "xpath=/html/body/div[1]/div/div/div/div/span[6]/div/ul/div/div/div[1]/li/div/span"
         ]
 
     # Tentativa de clique no tipo de arquivo
     clicou_tipo = False
-    try:
-        page.wait_for_selector(seletores_tipo[0], state="visible", timeout=120000)
-    except:
-        _log(logger, "⚠️ Menu de tipos demorou, tentando varredura rápida...")
+    time.sleep(1)
 
+    for sel in seletores_tipo:
+        try:
+            with page.expect_file_chooser(timeout=1000) as fc_info:
+                page.locator(sel).first.click(force=True, timeout=1000)
+            file_chooser = fc_info.value
+            file_chooser.set_files(lista_arquivos)
+            clicou_tipo = True
+            _log(logger, f"✅ Arquivo(s) carregados via: {sel}")
+            break
+        except:
+            continue
+    
+    if not clicou_tipo:
+        raise Exception("Nenhum seletor de tipo de arquivo funcionou.")
+    
+    # ESPERA DINÂMICA DE CARREGAMENTO (ARQUIVOS PESADOS)
+    # ================================================================
+    _log(logger, f"⏳ Processando {len(lista_arquivos)} arquivo(s). Aguardando o WhatsApp carregar...")
+    
+    # Seletor do botão de enviar (que só aparece quando o arquivo está pronto para legenda)
+    xpath_btn_enviar = '//*[@data-icon="send"] | //div[@aria-label="Enviar"] | //span[@data-icon="send"]'
+    
     try:
-        for sel in seletores_tipo:
-            try:
-                with page.expect_file_chooser(timeout=300) as fc_info:
-                    page.locator(sel).first.click(force=True, timeout=300)
-                file_chooser = fc_info.value
-                file_chooser.set_files(lista_arquivos)
-                clicou_tipo = True
-                _log(logger, f"✅ Arquivo(s) carregados via: {sel}")
-                break
-            except:
-                continue
-        
-        if not clicou_tipo:
-            raise Exception("Nenhum seletor de tipo de arquivo funcionou.")
-            
-        time.sleep(1) 
+        # Timeout de 5 minutos (300.000ms) para arquivos pesados, NÃO vai esperar 5 min se carregar em 10 segundos, ele segue na hora.
+        page.wait_for_selector(xpath_btn_enviar, state="visible", timeout=300000)
+        _log(logger, "✅ Arquivos carregados com sucesso.")
     except Exception as e:
-        raise Exception(f"Erro ao selecionar arquivos: {e}")
+        _log(logger, "❌ Timeout: Os arquivos demoraram mais de 5 minutos ou houve erro no upload.")
+        raise e
 
     # 3. Legenda (SEUS SELETORES)
     if message:
@@ -173,8 +180,9 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
             'xpath=//*[@id="app"]/div/div/div[3]/div/div[3]/div[2]/div/span/div/div/div/div[2]/div/div[1]/div[3]/div/div/div/div[1]/div[1]/p'
             'xpath=/html/body/div[1]/div/div/div/div/div[3]/div/div[3]/div[2]/div/span/div/div/div/div[2]/div/div[1]/div[3]/div/div/div/div[1]/div[1]/p'
         ]
+
         try:
-            page.wait_for_selector(seletores_legenda[0], state="visible", timeout=120000)
+            page.wait_for_selector(seletores_legenda[0], state="visible", timeout=1000)
         except:
             _log(logger, "⚠️ Aviso: Tela de legenda demorou a aparecer, tentando loop rápido...")
 
@@ -182,10 +190,10 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
         for sel in seletores_legenda:
             try:
                 target = page.locator(sel).last
-                target.wait_for(state="visible", timeout=500)
+                target.wait_for(state="visible", timeout=1000)
                 target.scroll_into_view_if_needed()
                 target.click(force=True)
-                time.sleep(1)
+                time.sleep(2)
                 pyperclip.copy(message)
                 page.keyboard.press("Control+V")
                 campo_ok = True
@@ -194,10 +202,9 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
             except: continue
         
         if not campo_ok:
-            page.keyboard.press("Tab")
             time.sleep(0.5)
-            pyperclip.copy(message)
-            page.keyboard.press("Control+V")
+            _log(logger, "❌ Não foi possível encontrar o campo de legenda pelos seletores.")
+        time.sleep(0.5)
 
     # 4. Enviar 
     _log(logger, "🚀 Enviando...")
@@ -211,7 +218,7 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
         "css=#app > div > div > div.x78zum5.xdt5ytf.x5yr21d > div > div.x10l6tqk.x13vifvy.x1o0tod.x78zum5.xh8yej3.x5yr21d.x6ikm8r.x10wlt62.x47corl > div.x9f619.x1n2onr6.x5yr21d.x6ikm8r.x10wlt62.x17dzmu4.x1i1dayz.x2ipvbc.xjdofhw.xyyilfv.x1iyjqo2.xpilrb4.x1t7ytsu.x1vb5itz.x12xzxwr > div > span > div > div > div > div.x1n2onr6.xupqr0c.x78zum5.x1r8uery.x1iyjqo2.xdt5ytf.x1hc1fzr.x6ikm8r.x10wlt62.x1anedsm > div > div.x78zum5.x1c4vz4f.x2lah0s.x1helyrv.x6s0dn4.x1qughib.x178xt8z.x13fuv20.xx42vgk.x1y1aw1k.xwib8y2.xf7dkkf.xv54qhq > div.x1247r65.xng8ra > span > div > div > span",
         "xpath=//*[@id='app']/div/div/div[3]/div/div[3]/div[2]/div/span/div/div/div/div[2]/div/div[2]/div[2]/span/div/div/span",
     ]
-    
+    time.sleep(3)
     enviou = False
     for sel_env in seletores_enviar:
         try:
@@ -239,7 +246,7 @@ def executar_envio(userdir, target, mode, message=None, file_path=None, logger=N
         search_box.fill(target)
         time.sleep(2)
         page.keyboard.press("Enter")
-        time.sleep(2)
+        time.sleep(3)
 
         if mode == "text":
             chat_box = page.locator('div[contenteditable="true"][data-tab="10"]')
@@ -248,7 +255,7 @@ def executar_envio(userdir, target, mode, message=None, file_path=None, logger=N
             pyperclip.copy(message)
             page.keyboard.press("Control+V")
             page.keyboard.press("Enter")
-            time.sleep(2.1)
+            time.sleep(5)
         else:
             enviar_arquivo_com_mensagem(page, file_path, message, logger)
             
