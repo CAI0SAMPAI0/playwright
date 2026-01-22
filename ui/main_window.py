@@ -174,7 +174,7 @@ class App(ctk.CTk):
         self.theme_btn.pack(side="right", padx=15)
 
         ctk.CTkLabel(tab, text="Contato / Número:", font=("Roboto", 12)).pack(anchor="w", padx=15, pady=(5, 0))
-        self.target_input = ctk.CTkEntry(tab, placeholder_text="Ex: 5511999999999", height=35)
+        self.target_input = ctk.CTkEntry(tab, placeholder_text="Ex: 5511999999999 / Tips Basic", height=35)
         self.target_input.pack(fill="x", padx=10, pady=5)
 
         self.mode_select = ctk.CTkOptionMenu(tab, values=["Somente texto", "Somente arquivo", "Arquivo + texto"], 
@@ -185,6 +185,22 @@ class App(ctk.CTk):
 
         self.message_input = ctk.CTkTextbox(tab, height=150, border_width=1)
         self.message_input.pack(fill="both", expand=True, padx=10, pady=5)
+        placeholder = "Digite sua mensagem aqui..."
+        self.message_input.insert("0.0", placeholder)
+
+        # Função para limpar quando ganhar foco
+        def on_focus_in(event):
+            if self.message_input.get("1.0", "end-1c") == placeholder:
+                self.message_input.delete("1.0", "end")
+
+        # Função para repor se ficar vazio ao perder foco
+        def on_focus_out(event):
+            if not self.message_input.get("1.0", "end-1c").strip():
+                self.message_input.insert("0.0", placeholder)
+
+        # Ligar os eventos
+        self.message_input.bind("<FocusIn>", on_focus_in)
+        self.message_input.bind("<FocusOut>", on_focus_out)
 
         action_box = ctk.CTkFrame(tab, border_width=1)
         action_box.pack(fill="x", padx=10, pady=10)
