@@ -7,7 +7,7 @@ import sys # garante o uso do executável correto
 def realizar_build():
     print("--- Iniciando processo de Build ---")
     
-    nome_projeto = "Study Practices"
+    nome_projeto = "Study_Practices"
     pasta_dist_raiz = "dist"
     arquivo_instrucoes = "Instruções.txt"
     arquivo_zip_final = f"{nome_projeto}.zip"

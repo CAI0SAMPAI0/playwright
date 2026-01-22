@@ -13,6 +13,27 @@ def _log(logger, msg):
         except: pass
     else: print(f"[LOG] {msg}")
 
+def clicar_primeiro_disponivel(page, lista_seletores, timeout_por_tentativa=300, escrever_texto=None):
+    """
+    Percorre a lista de seletores rapidamente. 
+    Se encontrar, clica. Se houver escrever_texto, ele cola o conteúdo.
+    """
+    for sel in lista_seletores:
+        try:
+            elemento = page.locator(sel).last # Usa o último para evitar menus ocultos
+            elemento.wait_for(state="visible", timeout=timeout_por_tentativa)
+            elemento.scroll_into_view_if_needed()
+            elemento.click(force=True)
+            
+            if escrever_texto:
+                time.sleep(0.5)
+                pyperclip.copy(escrever_texto)
+                page.keyboard.press("Control+V")
+            return True
+        except:
+            continue
+    return False
+
 def contador_execucao(incrementar=True):
     base_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     count_file = os.path.join(base_dir, "execution_count.txt")
@@ -58,6 +79,7 @@ def iniciar_driver(userdir, modo_execucao='manual', logger=None):
     )
     
     page = browser_context.pages[0]
+    page.set_default_timeout(120000)
     page.goto("https://web.whatsapp.com")
     
     try:
@@ -73,7 +95,7 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
     
     # 1. Botão Anexar
     xpath_anexo = '//div[@aria-label="Anexar"] | //span[@data-icon="plus"] | //span[@data-icon="plus-rounded"] | //span[@data-icon="clip"]'
-    btn_anexo = page.wait_for_selector(xpath_anexo, timeout=2000)
+    btn_anexo = page.wait_for_selector(xpath_anexo, state="visible", timeout=120000)
     btn_anexo.click()
     time.sleep(1)
 
@@ -112,6 +134,11 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
     # Tentativa de clique no tipo de arquivo
     clicou_tipo = False
     try:
+        page.wait_for_selector(seletores_tipo[0], state="visible", timeout=120000)
+    except:
+        _log(logger, "⚠️ Menu de tipos demorou, tentando varredura rápida...")
+
+    try:
         for sel in seletores_tipo:
             try:
                 with page.expect_file_chooser(timeout=300) as fc_info:
@@ -146,7 +173,11 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
             'xpath=//*[@id="app"]/div/div/div[3]/div/div[3]/div[2]/div/span/div/div/div/div[2]/div/div[1]/div[3]/div/div/div/div[1]/div[1]/p'
             'xpath=/html/body/div[1]/div/div/div/div/div[3]/div/div[3]/div[2]/div/span/div/div/div/div[2]/div/div[1]/div[3]/div/div/div/div[1]/div[1]/p'
         ]
-        
+        try:
+            page.wait_for_selector(seletores_legenda[0], state="visible", timeout=120000)
+        except:
+            _log(logger, "⚠️ Aviso: Tela de legenda demorou a aparecer, tentando loop rápido...")
+
         campo_ok = False
         for sel in seletores_legenda:
             try:
@@ -154,7 +185,7 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
                 target.wait_for(state="visible", timeout=500)
                 target.scroll_into_view_if_needed()
                 target.click(force=True)
-                time.sleep(1.2)
+                time.sleep(1)
                 pyperclip.copy(message)
                 page.keyboard.press("Control+V")
                 campo_ok = True
@@ -164,9 +195,11 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
         
         if not campo_ok:
             page.keyboard.press("Tab")
+            time.sleep(0.5)
+            pyperclip.copy(message)
             page.keyboard.press("Control+V")
 
-    # 4. Enviar (SEUS SELETORES)
+    # 4. Enviar 
     _log(logger, "🚀 Enviando...")
     seletores_enviar = [
         "xpath=//span[@data-icon='send']",
@@ -191,7 +224,7 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
         except: continue
 
     if enviou:
-        time.sleep(10)
+        time.sleep(15)
         #contador_execucao(incrementar=True)
         _log(logger, "🚀 Concluído!")
     else:
@@ -215,7 +248,7 @@ def executar_envio(userdir, target, mode, message=None, file_path=None, logger=N
             pyperclip.copy(message)
             page.keyboard.press("Control+V")
             page.keyboard.press("Enter")
-            time.sleep(2)
+            time.sleep(2.1)
         else:
             enviar_arquivo_com_mensagem(page, file_path, message, logger)
             

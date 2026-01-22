@@ -33,6 +33,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=['resources\\Taty_s-English-Logo.ico'],
+    uac_admin=True
 )
 coll = COLLECT(
     exe,

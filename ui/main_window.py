@@ -124,20 +124,6 @@ class App(ctk.CTk):
                 else:
                     entry.icursor(cursor_pos)
 
-    '''def _aplicar_mascara_hora(self, event):
-        entry = event.widget
-        if event.keysym in ("Left", "Right", "Up", "Down", "Tab", "Shift_L", "Shift_R"): return
-        texto = "".join([c for c in entry.get().replace(":", "") if c.isdigit()])[:4]
-        novo_texto = ""
-        if len(texto) > 0: novo_texto += texto[:2]
-        if len(texto) > 2: novo_texto += ":" + texto[2:]
-        posicao_cursor = entry.index("insert")
-        entry.delete(0, "end")
-        entry.insert(0, novo_texto)
-        if posicao_cursor == 2 and event.keysym != "BackSpace": entry.icursor(3)
-        elif posicao_cursor == 3 and event.keysym == "BackSpace": entry.icursor(2)
-        else: entry.icursor(posicao_cursor)'''
-
     def _validar_campos(self, target, mode, message, file_path):
         if not target:
             messagebox.showerror("Campo Vazio", "Por favor, insira o contato ou número.")
@@ -184,7 +170,7 @@ class App(ctk.CTk):
         self.count_label = ctk.CTkLabel(header_frame, text="🚀 Execuções: 0", font=("Roboto", 13, "bold"), text_color=self.primary_color)
         self.count_label.pack(side="left", padx=15, pady=8)
         
-        self.theme_btn = ctk.CTkButton(header_frame, text="🌓 Tema", width=100, height=28, fg_color=self.primary_color, hover_color=self.hover_color, command=self._alternar_tema)
+        self.theme_btn = ctk.CTkButton(header_frame, text="Alterar tema", width=100, height=28, fg_color=self.primary_color, hover_color=self.hover_color, command=self._alternar_tema)
         self.theme_btn.pack(side="right", padx=15)
 
         ctk.CTkLabel(tab, text="Contato / Número:", font=("Roboto", 12)).pack(anchor="w", padx=15, pady=(5, 0))
@@ -333,7 +319,7 @@ class App(ctk.CTk):
                 b_edit = ctk.CTkButton(btns, text="📝", width=30, fg_color=self.primary_color, hover_color=self.hover_color, command=lambda r=row: self._abrir_edicao(r))
                 b_edit.pack(side="left", padx=2)
                 
-                b_del = ctk.CTkButton(btns, text="🗑️", width=30, fg_color="#FF5252", hover_color="#ff1744", command=lambda r=row: self._excluir_agendamento(r))
+                b_del = ctk.CTkButton(btns, text="🗑️", width=30, fg_color="#CF5252", hover_color="#ff0000", command=lambda r=row: self._excluir_agendamento(r))
                 b_del.pack(side="left", padx=2)
                 
                 self.cards_agendamentos[t_id] = {
@@ -353,8 +339,29 @@ class App(ctk.CTk):
         edit_win = ctk.CTkToplevel(self)
         edit_win.title(f"Editando Agendamento")
         edit_win.geometry("420x720")
+
+        # --- APLICAÇÃO DO ÍCONE ---
+        try:
+            if getattr(sys, 'frozen', False):
+                # Caminho para quando estiver compilado em .EXE
+                base_path = sys._MEIPASS
+            else:
+                # Caminho para quando estiver rodando o script .PY
+                base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            
+            icon_path = os.path.join(base_path, "resources", "Taty_s-English-Logo.ico")
+            
+            if os.path.exists(icon_path):
+                edit_win.iconbitmap(icon_path)
+                edit_win.after(200, lambda: edit_win.iconbitmap(icon_path)) 
+            else:
+                print(f"Aviso: Ícone não encontrado em {icon_path}")
+        except Exception as e:
+            print(f"Erro ao carregar ícone na edição: {e}")
+
         edit_win.transient(self)
         edit_win.lift(); edit_win.focus_force()
+        
         
         self.temp_edit_file = task_data['file_path']
         dt_original = datetime.fromisoformat(task_data['scheduled_time'])
@@ -367,7 +374,7 @@ class App(ctk.CTk):
         rev_map = {v: k for k, v in map_modos.items()}
         
         msg_txt = ctk.CTkTextbox(edit_win, height=120, width=320)
-        btn_alt_file = ctk.CTkButton(edit_win, text="Alterar Arquivo(s)", width=150, height=28, fg_color="#3d3d3d", hover_color="#5a5a5a")
+        btn_alt_file = ctk.CTkButton(edit_win, text="Alterar Arquivo(s)", width=150, height=28, fg_color=self.primary_color, hover_color=self.hover_color)
 
         def atualizar_campos_edicao(choice):
             if choice == "Somente texto":
@@ -375,13 +382,14 @@ class App(ctk.CTk):
                 msg_txt.configure(state="normal")
             elif choice == "Somente arquivo":
                 msg_txt.delete("1.0", "end"); msg_txt.configure(state="disabled")
-                btn_alt_file.configure(state="normal", fg_color="#3d3d3d")
+                btn_alt_file.configure(state="normal", fg_color=self.primary_color, hover_color=self.hover_color)
             else:
                 msg_txt.configure(state="normal")
-                btn_alt_file.configure(state="normal", fg_color="#3d3d3d")
+                btn_alt_file.configure(state="normal", fg_color=self.primary_color, hover_color=self.hover_color)
 
         mode_edit_select = ctk.CTkOptionMenu(edit_win, values=list(map_modos.values()), 
-                                             fg_color=self.primary_color, button_color=self.primary_color, 
+                                             fg_color=self.primary_color, button_color=self.primary_color,
+                                             button_hover_color=self.hover_color, 
                                              width=320, command=atualizar_campos_edicao)
         mode_edit_select.set(map_modos.get(task_data['mode'], "Somente texto"))
         mode_edit_select.pack(pady=5)
@@ -393,7 +401,7 @@ class App(ctk.CTk):
         dt_edit_frame = ctk.CTkFrame(edit_win, fg_color="transparent")
         dt_edit_frame.pack()
         
-        btn_date_edit = ctk.CTkButton(dt_edit_frame, text=dt_original.strftime("%d/%m/%Y"), width=120, command=lambda: self._abrir_calendario_custom(btn_date_edit))
+        btn_date_edit = ctk.CTkButton(dt_edit_frame, text=dt_original.strftime("%d/%m/%Y"), width=120, command=lambda: self._abrir_calendario_custom(btn_date_edit), fg_color=self.primary_color, hover_color=self.hover_color)
         btn_date_edit.pack(side="left", padx=5)
         
         time_ent_edit = ctk.CTkEntry(dt_edit_frame, width=80)
@@ -436,10 +444,10 @@ class App(ctk.CTk):
                 messagebox.showinfo("Sucesso", "Atualizado!"); edit_win.destroy(); self._carregar_agendamentos()
             except Exception as e: messagebox.showerror("Erro", str(e))
 
-        ctk.CTkButton(edit_win, text="Salvar Alterações", fg_color="#4CAF50", height=45, command=salvar).pack(pady=25)
+        ctk.CTkButton(edit_win, text="Salvar Alterações", fg_color="#4CAF50", hover_color="#277e0f", height=45, command=salvar).pack(pady=25)
 
     def _excluir_agendamento(self, row):
-        if messagebox.askyesno("Excluir", f"Remover {row[2]}?"):
+        if messagebox.askyesno("Excluir", f"Deseja remover {row[2]}?"):
             try:
                 windows_scheduler.delete_windows_task(row[0])
                 db.deletar(row[0]); self._carregar_agendamentos()
@@ -493,9 +501,7 @@ class App(ctk.CTk):
             messagebox.showerror("Erro", str(e))
 
     def _criar_tarefa_agendada(self, t_id, task_name, target, mode, message, file_path, time_str, date_str):
-        """
-        ✅ NOVA FUNÇÃO: Cria tarefa do Windows de forma não-bloqueante
-        """
+       
         try:
             json_cfg = {
                 "target": target, 
@@ -527,7 +533,33 @@ class App(ctk.CTk):
         top = ctk.CTkToplevel(self)
         top.title("Data")
         top.attributes("-topmost", True)
-        cal = Calendar(top, selectmode='day', date_pattern='dd/mm/yyyy')
+
+        # --- APLICANDO ÍCONE NO CALENDÁRIO ---
+        def forcar_icone():
+            try:
+                # Usa o caminho absoluto direto para evitar erro de localização
+                if getattr(sys, 'frozen', False):
+                    base = sys._MEIPASS
+                else:
+                    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                
+                icon_path = os.path.join(base, "resources", "Taty_s-English-Logo.ico")
+                
+                if os.path.exists(icon_path):
+                    # Tenta as duas formas de carregar o ícone
+                    top.iconbitmap(icon_path)
+                    top.after(200, lambda: top.iconbitmap(icon_path))
+            except:
+                pass
+
+        # Chama a função quando a janela estiver ociosa (pronta)
+        top.after_idle(forcar_icone)
+
+        cal = Calendar(top, selectmode='day', date_pattern='dd/mm/yyyy',background=self.hover_color,      # Cor do cabeçalho
+                       selectbackground=self.hover_color,  # COR DO DIA SELECIONADO (O seu roxo)
+                       selectforeground='white',           # Cor do texto no dia selecionado
+                       normalbackground='#f0f0f0',         # Fundo dos dias normais
+                       weekendbackground='#e0e0e0')
         cal.pack(pady=10, padx=10)
         ctk.CTkButton(top, text="Ok", fg_color=self.primary_color, hover_color=self.hover_color, command=lambda: [target_btn.configure(text=cal.get_date()), top.destroy()]).pack(pady=5)
 
