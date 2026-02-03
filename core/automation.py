@@ -26,7 +26,7 @@ def clicar_primeiro_disponivel(page, lista_seletores, timeout_por_tentativa=300,
             elemento.click(force=True)
             
             if escrever_texto:
-                time.sleep(0.5)
+                time.sleep(1)
                 pyperclip.copy(escrever_texto)
                 page.keyboard.press("Control+V")
             return True
@@ -63,7 +63,7 @@ def iniciar_driver(userdir, modo_execucao='manual', logger=None):
     
     browser_args = [
         '--disable-notifications', '--no-sandbox', '--disable-setuid-sandbox',
-        '--start-maximized', '--force-device-scale-factor=1.25', '--high-dpi-support=1'
+        '--start-maximized', '--force-device-scale-factor=1.25', '--high-dpi-support=1', '--lang=pt-BR'
     ]
     
     if is_auto:
@@ -73,7 +73,11 @@ def iniciar_driver(userdir, modo_execucao='manual', logger=None):
 
     browser_context = pw.chromium.launch_persistent_context(
         executable_path=str(chromium_path),
-        user_data_dir=userdir, headless=False, args=browser_args,
+        user_data_dir=userdir, headless=False, args=browser_args, locale="pt-BR", timezone_id="America/Sao_Paulo",
+        # FORÇA O SITE A RECEBER O CONTEÚDO EM PT-BR
+        extra_http_headers={
+            "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"
+        },
         viewport=None, no_viewport=True,
         user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     )
@@ -81,6 +85,12 @@ def iniciar_driver(userdir, modo_execucao='manual', logger=None):
     page = browser_context.pages[0]
     page.set_default_timeout(120000)
     page.goto("https://web.whatsapp.com")
+
+    _log(logger, "🧹 Limpando cache de idioma...")
+    page.evaluate("""() => {
+        window.localStorage.removeItem('user-language-preference');
+        window.localStorage.setItem('user-language-preference', 'pt-BR');
+    }""")
     
     try:
         page.wait_for_selector('div[data-tab="3"]', timeout=120000)
@@ -94,10 +104,10 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
     _log(logger, "📎 Preparando anexos...")
     
     # 1. Botão Anexar
-    xpath_anexo = '//div[@aria-label="Anexar"] | //span[@data-icon="plus"] | //span[@data-icon="plus-rounded"] | //span[@data-icon="clip"]'
+    xpath_anexo = '//div[@aria-label="Anexar"] | //span[@data-icon="plus"] | //span[@data-icon="plus-rounded"] | //span[@data-icon="clip"] | //div[@aria-label="Attach"]'
     btn_anexo = page.wait_for_selector(xpath_anexo, state="visible", timeout=120000)
     btn_anexo.click()
-    time.sleep(1)
+    time.sleep(2)
 
     # 2. Processamento de Caminhos
     if isinstance(file_path, str):
@@ -112,6 +122,12 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
     # SEPARAÇÃO DOS SEUS SELETORES DE TIPO (FOTO OU DOCUMENTO)
     if is_media:
         seletores_tipo = [
+            "xpath=//span[contains(text(), 'Fotos')]",    # PT
+            "xpath=//span[contains(text(), 'Photos')]",   # EN
+            "xpath=//div[@aria-label='Fotos e vídeos']",
+            "xpath=//div[@aria-label='Photos & videos']",
+            "css=[data-icon='image']", 
+            "css=[data-testid='mi-attach-media']",
             "xpath=//div[@aria-label='Fotos e vídeos']",
             "css=#app > div > div > span:nth-child(8) > div > ul > div > div > div:nth-child(2) > li > div > span",
             "xpath=//*[@id='app']/div/div/span[6]/div/ul/div/div/div[2]/li/div/span",
@@ -122,6 +138,12 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
         ]
     else:
         seletores_tipo = [
+            "xpath=//span[contains(text(), 'Documento')]", # PT
+            "xpath=//span[contains(text(), 'Document')]",  # EN
+            "xpath=//div[@aria-label='Documento']",
+            "xpath=//div[@aria-label='Document']",
+            "css=[data-icon='document']",
+            "css=[data-testid='mi-attach-document']",
             "xpath=//div[@aria-label='Documento']",
             "css=#app > div > div > span:nth-child(8) > div > ul > div > div > div:nth-child(1) > li > div > span",
             'css=#app > div > div > div:nth-child(11) > div > div > div.xu96u03.xm80bdy.x10l6tqk.x13vifvy.xoz0ns6.x1gslohp > div.html-div.xdj266r.x14z9mp.xat24cr.x1lziwak.xexx8yu.xyri2b.x18d9i69.x1c1uobl > div > div > div > div > div.x78zum5.xdt5ytf.x1iyjqo2.x1n2onr6 > div:nth-child(1) > div.x6s0dn4.xlr9sxt.xvvg52n.xwd4zgb.xq8v1ta.x78zum5.xu0aao5.xh8yej3 > div.x78zum5.xdt5ytf.x1iyjqo2.xeuugli.x6ikm8r.x10wlt62.xde1mab > span',
@@ -133,7 +155,7 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
 
     # Tentativa de clique no tipo de arquivo
     clicou_tipo = False
-    time.sleep(1)
+    time.sleep(2)
 
     for sel in seletores_tipo:
         try:
@@ -155,7 +177,7 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
     _log(logger, f"⏳ Processando {len(lista_arquivos)} arquivo(s). Aguardando o WhatsApp carregar...")
     
     # Seletor do botão de enviar (que só aparece quando o arquivo está pronto para legenda)
-    xpath_btn_enviar = '//*[@data-icon="send"] | //div[@aria-label="Enviar"] | //span[@data-icon="send"]'
+    xpath_btn_enviar = '//*[@data-icon="send"] | //div[@aria-label="Enviar"] | //span[@data-icon="send"] | //*[@id="app"]/div/div/div[3]/div/div[3]/div[2]/div/span/div/div/div/div[2]/div/div[2]/div[2]/span/div/div[1]/span' 
     
     try:
         # Timeout de 5 minutos (300.000ms) para arquivos pesados, NÃO vai esperar 5 min se carregar em 10 segundos, ele segue na hora.
@@ -177,8 +199,13 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
             "xpath=//div[contains(@aria-label, 'legenda')]",
             "css=div.lexical-rich-text-input div[contenteditable='true']",
             'css=#app > div > div > div.x78zum5.xdt5ytf.x5yr21d > div > div.x10l6tqk.x13vifvy.x1o0tod.x78zum5.xh8yej3.x5yr21d.x6ikm8r.x10wlt62.x47corl > div.x9f619.x1n2onr6.x5yr21d.x6ikm8r.x10wlt62.x17dzmu4.x1i1dayz.x2ipvbc.xjdofhw.xyyilfv.x1iyjqo2.xpilrb4.x1t7ytsu.x1vb5itz.x12xzxwr > div > span > div > div > div > div.x1n2onr6.xupqr0c.x78zum5.x1r8uery.x1iyjqo2.xdt5ytf.x1hc1fzr.x6ikm8r.x10wlt62.x1anedsm > div > div.x78zum5.x1iyjqo2.xs83m0k.x1r8uery.xdt5ytf.x1qughib.x6ikm8r.x10wlt62 > div.x1c4vz4f.xs83m0k.xdl72j9.x1g77sc7.x78zum5.xozqiw3.x1oa3qoh.x12fk4p8.xeuugli.x2lwn1j.xl56j7k.x1q0g3np.x6s0dn4.x1n2onr6.xo8q3i6.x1y1aw1k.xwib8y2.x1c1uobl.xyri2b > div > div > div > div.x1n2onr6.xh8yej3.x1k70j0n.x14z9mp.xzueoph.x1lziwak.xisnujt.x14ug900.x1vvkbs.x126k92a.x1hx0egp.lexical-rich-text-input > div.x1hx0egp.x6ikm8r.x1odjw0f.x1k6rcq7.x1lkfr7t > p',
-            'xpath=//*[@id="app"]/div/div/div[3]/div/div[3]/div[2]/div/span/div/div/div/div[2]/div/div[1]/div[3]/div/div/div/div[1]/div[1]/p'
-            'xpath=/html/body/div[1]/div/div/div/div/div[3]/div/div[3]/div[2]/div/span/div/div/div/div[2]/div/div[1]/div[3]/div/div/div/div[1]/div[1]/p'
+            'xpath=//*[@id="app"]/div/div/div[3]/div/div[3]/div[2]/div/span/div/div/div/div[2]/div/div[1]/div[3]/div/div/div/div[1]/div[1]/p',
+            'xpath=/html/body/div[1]/div/div/div/div/div[3]/div/div[3]/div[2]/div/span/div/div/div/div[2]/div/div[1]/div[3]/div/div/div/div[1]/div[1]/p',
+            "xpath=//div[contains(@aria-label, 'legenda')]", # Português
+            "xpath=//div[contains(@aria-label, 'caption')]", # Inglês
+            "css=div[contenteditable='true'][role='textbox']", # Genérico funcional
+            "css=.lexical-rich-text-input [contenteditable='true']", # Estrutura técnica
+            "xpath=//footer//div[@contenteditable='true']" # Posição na tela
         ]
 
         try:
@@ -186,6 +213,7 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
         except:
             _log(logger, "⚠️ Aviso: Tela de legenda demorou a aparecer, tentando loop rápido...")
 
+        time.sleep(1.2)
         campo_ok = False
         for sel in seletores_legenda:
             try:
@@ -209,6 +237,7 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
     # 4. Enviar 
     _log(logger, "🚀 Enviando...")
     seletores_enviar = [
+        "css=#app > div > div > div.x78zum5.xdt5ytf.x5yr21d > div > div.x10l6tqk.x13vifvy.x1o0tod.x78zum5.xh8yej3.x5yr21d.x6ikm8r.x10wlt62.x47corl > div.x9f619.x1n2onr6.x5yr21d.x6ikm8r.x10wlt62.x17dzmu4.x1i1dayz.x2ipvbc.xjdofhw.xyyilfv.x1iyjqo2.xpilrb4.x1t7ytsu.x1vb5itz.x12xzxwr > div > span > div > div > div > div.x1n2onr6.xupqr0c.x78zum5.x1r8uery.x1iyjqo2.xdt5ytf.x1hc1fzr.x6ikm8r.x10wlt62.x1anedsm > div > div.x78zum5.x1c4vz4f.x2lah0s.x1helyrv.x6s0dn4.x1qughib.x178xt8z.x13fuv20.xx42vgk.x1y1aw1k.xwib8y2.xf7dkkf.xv54qhq > div.x1247r65.xng8ra > span > div > div.x78zum5.x6s0dn4.xl56j7k.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x1f6kntn.xk50ysn.xtvhhri.x1c9tyrk.xeusxvb.x1pahc9y.x1ertn4p.xu306ak.x12s1jxh.xkdsq27.xwwtwea.x1gfkgh9.x1247r65.xng8ra.x1pse0pq.xfn3atn > span"
         "xpath=//span[@data-icon='send']",
         "xpath=//div[@role='button' and @aria-label='Enviar']",
         "xpath=//*[@id='app']/div/div/div[3]/div/div[3]/div[2]/div/span/div/div/div/div[2]/div/div[2]/div[2]/span/div/div/span",
@@ -218,24 +247,29 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
         "css=#app > div > div > div.x78zum5.xdt5ytf.x5yr21d > div > div.x10l6tqk.x13vifvy.x1o0tod.x78zum5.xh8yej3.x5yr21d.x6ikm8r.x10wlt62.x47corl > div.x9f619.x1n2onr6.x5yr21d.x6ikm8r.x10wlt62.x17dzmu4.x1i1dayz.x2ipvbc.xjdofhw.xyyilfv.x1iyjqo2.xpilrb4.x1t7ytsu.x1vb5itz.x12xzxwr > div > span > div > div > div > div.x1n2onr6.xupqr0c.x78zum5.x1r8uery.x1iyjqo2.xdt5ytf.x1hc1fzr.x6ikm8r.x10wlt62.x1anedsm > div > div.x78zum5.x1c4vz4f.x2lah0s.x1helyrv.x6s0dn4.x1qughib.x178xt8z.x13fuv20.xx42vgk.x1y1aw1k.xwib8y2.xf7dkkf.xv54qhq > div.x1247r65.xng8ra > span > div > div > span",
         "xpath=//*[@id='app']/div/div/div[3]/div/div[3]/div[2]/div/span/div/div/div/div[2]/div/div[2]/div[2]/span/div/div/span",
     ]
-    time.sleep(3)
+    time.sleep(2)
     enviou = False
     for sel_env in seletores_enviar:
         try:
             btn = page.locator(sel_env).last
-            btn.wait_for(state="visible", timeout=800)
+            btn.wait_for(state="visible", timeout=1500)
             btn.scroll_into_view_if_needed()
             btn.click(force=True)
             enviou = True
             break
         except: continue
 
+    if not enviou:
+        _log(logger, "Botão não encontrado visualmente, apertando ENTER...")
+        page.keyboard.press("Enter")
+        enviou = True
+
     if enviou:
         time.sleep(15)
         #contador_execucao(incrementar=True)
         _log(logger, "🚀 Concluído!")
     else:
-        page.keyboard.press("Enter")
+        page.keyboard.press("Enter") # plano B
 
 def executar_envio(userdir, target, mode, message=None, file_path=None, logger=None, modo_execucao='manual'):
     pw, context, page = None, None, None

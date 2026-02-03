@@ -37,9 +37,9 @@ def get_chrome_path():
     Busca o executável do Chrome ou Edge no sistema
     """
     caminhos = [
-        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        r"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        r"C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+        r"C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
     ]
     for c in caminhos:
         if os.path.exists(c):
