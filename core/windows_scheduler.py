@@ -42,7 +42,7 @@ exit
     with open(bat_path, 'w', encoding='utf-8') as f:
         f.write(bat_content)
 
-    vbs_content = f'CreateObject("Wscript.Shell").Run "{bat_path}", 0, False'
+    vbs_content = f'CreateObject("Wscript.Shell").Run chr(34) & "{bat_path}" & chr(34), 0, False'
     with open(vbs_path, 'w', encoding='utf-8') as f:
         f.write(vbs_content)
     

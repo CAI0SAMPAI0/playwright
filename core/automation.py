@@ -62,41 +62,50 @@ def iniciar_driver(userdir, modo_execucao='manual', logger=None):
     is_auto = modo_execucao in ['auto', 'background']
     
     browser_args = [
-        '--disable-notifications', '--no-sandbox', '--disable-setuid-sandbox',
-        '--start-maximized', '--force-device-scale-factor=1.25', '--high-dpi-support=1', '--lang=pt-BR'
+        '--disable-blink-features=AutomationControlled',
+        '--disable-notifications', 
+        '--no-sandbox', 
+        '--disable-setuid-sandbox',
+        '--start-maximized', 
+        '--force-device-scale-factor=0.90', 
+        '--high-dpi-support=1', 
+        '--lang=pt-BR'
     ]
     
     if is_auto:
-        browser_args.extend(['--window-position=9999,9999', '--force-device-scale-factor=1.25','--window-size=1366,768', '--high-dpi-support=1'])
+        browser_args.extend(['--window-position=9999,9999', '--force-device-scale-factor=0.90','--window-size=1366,768', '--high-dpi-support=1'])
 
     chromium_path = get_chrome_path()
 
-    browser_context = pw.chromium.launch_persistent_context(
-        executable_path=str(chromium_path),
-        user_data_dir=userdir, headless=False, args=browser_args, locale="pt-BR", timezone_id="America/Sao_Paulo",
-        # FORÇA O SITE A RECEBER O CONTEÚDO EM PT-BR
-        extra_http_headers={
-            "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"
-        },
-        viewport=None, no_viewport=True,
-        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    )
+    try:
+        browser_context = pw.chromium.launch_persistent_context(
+            executable_path=str(chromium_path),
+            user_data_dir=userdir, 
+            headless=False, 
+            args=browser_args, 
+            locale="pt-BR", 
+            timezone_id="America/Sao_Paulo",
+            viewport=None, 
+            no_viewport=True,
+            # User agent comum para evitar bloqueios
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+        )
+    except Exception as e:
+        _log(logger, "❌ Erro ao lançar navegador. Verifique se já não há uma janela aberta.")
+        pw.stop()
+        raise e
     
     page = browser_context.pages[0]
     page.set_default_timeout(120000)
-    page.goto("https://web.whatsapp.com")
-
-    _log(logger, "🧹 Limpando cache de idioma...")
-    page.evaluate("""() => {
-        window.localStorage.removeItem('user-language-preference');
-        window.localStorage.setItem('user-language-preference', 'pt-BR');
-    }""")
-    
     try:
+        page.goto("https://web.whatsapp.com")
         page.wait_for_selector('div[data-tab="3"]', timeout=120000)
         _log(logger, "✓ WhatsApp carregado.")
     except Exception as e:
-        if is_auto: page.screenshot(path="erro_login_agendado.png")
+        if is_auto: 
+            try: page.screenshot(path="erro_login.png")
+            except: pass
+        # Se falhar o login, não derruba tudo imediatamente, tenta fechar limpo
         raise e
     return pw, browser_context, page
 
@@ -111,13 +120,13 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
 
     # 2. Processamento de Caminhos
     if isinstance(file_path, str):
-        clean_path = file_path.replace('nC:\\', '\nC:\\')
+        clean_path = file_path.replace('nC:\\', '\nC:\\').replace('"', '')
         lista_arquivos = [os.path.abspath(p.strip()) for p in clean_path.split('\n') if p.strip()]
     else:
         lista_arquivos = [os.path.abspath(str(file_path).strip())]
 
     ext = os.path.splitext(lista_arquivos[0].lower())[1]
-    is_media = ext in ['.jpg', '.jpeg', '.png', '.gif', '.mp4']
+    is_media = ext in ['.jpg', '.jpeg', '.png', '.gif', '.mp4', '.avi']
 
     # SEPARAÇÃO DOS SEUS SELETORES DE TIPO (FOTO OU DOCUMENTO)
     if is_media:
@@ -136,6 +145,7 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
             'xpath=//*[@id="app"]/div/div/div[4]/div/div/div[1]/div[1]/div/div/div/div/div[1]/div[2]/div[1]/div[2]/span',
             'xpath=/html/body/div[1]/div/div/div/div/div[4]/div/div/div[1]/div[1]/div/div/div/div/div[1]/div[2]/div[1]/div[2]/span'
         ]
+        backup_selector = "input[type='file']"
     else:
         seletores_tipo = [
             "xpath=//span[contains(text(), 'Documento')]", # PT
@@ -152,6 +162,7 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
             "xpath=//*[@id='app']/div/div/span[6]/div/ul/div/div/div[1]/li/div/span",
             "xpath=/html/body/div[1]/div/div/div/div/span[6]/div/ul/div/div/div[1]/li/div/span"
         ]
+        backup_selector = "input[type='file']"
 
     # Tentativa de clique no tipo de arquivo
     clicou_tipo = False
