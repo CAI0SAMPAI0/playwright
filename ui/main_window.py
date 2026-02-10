@@ -420,7 +420,9 @@ class App(ctk.CTk):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 creationflags=creationflags,
-                cwd=str(BASE_DIR)  # ← IMPORTANTE: Define diretório de trabalho
+                cwd=str(BASE_DIR),
+                encoding='utf-8',
+                errors='replace'
             )
             
             print(f"[DEBUG] Processo iniciado com PID: {processo.pid}")

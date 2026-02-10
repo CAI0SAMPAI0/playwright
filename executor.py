@@ -5,8 +5,6 @@ EXECUTOR ISOLADO - Roda automação em processo separado.
 Chamado por:
 - GUI (subprocess manual)
 - Task Scheduler (.bat)
-
-NÃO importa CustomTkinter (economia de memória).
 """
 
 import sys
@@ -16,7 +14,6 @@ from pathlib import Path
 from datetime import datetime
 
 # ===== SETUP DE PATHS =====
-# Garante que imports funcionem mesmo quando chamado pelo .bat
 BASE_DIR = Path(__file__).parent.absolute()
 sys.path.insert(0, str(BASE_DIR))
 
@@ -32,11 +29,18 @@ def main(json_path: str):
     Args:
         json_path: Caminho para task_X.json
     """
+    # ===== FORÇA UTF-8 (FIX WINDOWS) =====
+    if sys.stdout:
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+        except:
+            pass
+    
     # ===== LOGGING =====
     log_dir = BASE_DIR / "logs" / datetime.now().strftime("%Y-%m-%d")
     log_dir.mkdir(parents=True, exist_ok=True)
     
-    task_name = Path(json_path).stem  # "task_123"
+    task_name = Path(json_path).stem
     logger = get_logger(task_name, log_dir / f"{task_name}.log")
     
     logger.info("=" * 70)
@@ -56,7 +60,6 @@ def main(json_path: str):
             db.atualizar_status(task_id, "running")
         
         # ===== EXECUTAR AUTOMAÇÃO (ISOLADA) =====
-        # Usa perfil SEPARADO do agendador (nunca conflita com GUI)
         profile_dir = get_whatsapp_profile_dir(modo='scheduler')
         logger.info(f"Perfil: {profile_dir}")
         
@@ -67,14 +70,14 @@ def main(json_path: str):
             message=dados.get("message"),
             file_path=dados.get("file_path"),
             logger=logger,
-            modo_execucao='auto'  # Janela minimizada
+            modo_execucao='auto'
         )
         
         # ===== SUCESSO =====
         if task_id:
             db.atualizar_status(task_id, "completed")
         
-        logger.info("✅ TAREFA CONCLUÍDA COM SUCESSO")
+        logger.info("[OK] TAREFA CONCLUIDA COM SUCESSO")
         logger.info("=" * 70)
         sys.exit(0)
         
@@ -83,7 +86,7 @@ def main(json_path: str):
         import traceback
         erro = traceback.format_exc()
         
-        logger.error("❌ ERRO NA EXECUÇÃO:")
+        logger.error("[ERRO] ERRO NA EXECUCAO:")
         logger.error(erro)
         
         if task_id:
@@ -91,7 +94,7 @@ def main(json_path: str):
         
         # Grava arquivo de status para GUI ler
         status_file = Path(json_path).with_suffix('.status')
-        with open(status_file, 'w') as f:
+        with open(status_file, 'w', encoding='utf-8') as f:
             f.write(f"FAILED: {str(e)}")
         
         sys.exit(1)
