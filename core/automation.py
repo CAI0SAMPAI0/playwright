@@ -58,8 +58,11 @@ def iniciar_driver(userdir, modo_execucao='manual', logger=None):
         # Força o Playwright a usar a pasta padrão de instalação no AppData do Windows
         #os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
     _log(logger, f"Iniciando Playwright | Perfil: {userdir}")
+    _log(logger, f"Modo de execução: {modo_execucao}")
     pw = sync_playwright().start()
     is_auto = modo_execucao in ['auto', 'background']
+
+    _log(logger, f"is_auto = {is_auto}")  
     
     browser_args = [
         '--disable-blink-features=AutomationControlled',
@@ -73,9 +76,11 @@ def iniciar_driver(userdir, modo_execucao='manual', logger=None):
     ]
     
     if is_auto:
-        browser_args.extend(['--window-position=9999,9999', '--force-device-scale-factor=0.90','--window-size=1366,768', '--high-dpi-support=1'])
+        browser_args.extend(['--window-position=-2400,-2400', '--force-device-scale-factor=0.90','--window-size=1366,768', '--high-dpi-support=1'])
 
     chromium_path = get_chrome_path()
+    _log(logger, f"Chrome path: {chromium_path}")
+    _log(logger, f"Browser args: {browser_args}")
 
     try:
         browser_context = pw.chromium.launch_persistent_context(

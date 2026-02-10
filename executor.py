@@ -9,6 +9,22 @@ Chamado por:
 
 import sys
 import os
+if sys.platform == 'win32':
+    # Python 3.7+: Reconfigura stdout/stderr para UTF-8
+    if sys.stdout:
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+        except AttributeError:
+            # Fallback para Python < 3.7
+            import io
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    
+    if sys.stderr:
+        try:
+            sys.stderr.reconfigure(encoding='utf-8')
+        except AttributeError:
+            import io
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 import json
 from pathlib import Path
 from datetime import datetime
@@ -53,6 +69,7 @@ def main(json_path: str):
         
         task_id = dados.get("task_id")
         logger.info(f"Task ID: {task_id}")
+        modo_execucao = 'manual' if task_id is None else 'auto'
         
         # ===== ATUALIZAR STATUS NO BANCO =====
         db = get_db()
@@ -60,8 +77,9 @@ def main(json_path: str):
             db.atualizar_status(task_id, "running")
         
         # ===== EXECUTAR AUTOMAÇÃO (ISOLADA) =====
-        profile_dir = get_whatsapp_profile_dir(modo='scheduler')
+        profile_dir = get_whatsapp_profile_dir()
         logger.info(f"Perfil: {profile_dir}")
+        logger.info(f"Modo: {modo_execucao}")
         
         executar_envio(
             userdir=profile_dir,
@@ -70,7 +88,7 @@ def main(json_path: str):
             message=dados.get("message"),
             file_path=dados.get("file_path"),
             logger=logger,
-            modo_execucao='auto'
+            modo_execucao=modo_execucao
         )
         
         # ===== SUCESSO =====

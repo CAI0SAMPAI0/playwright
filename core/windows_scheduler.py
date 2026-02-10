@@ -17,6 +17,9 @@ def create_task_bat(task_id, task_name, json_config):
     json_path = scheduled_tasks_dir / f"task_{task_id}.json"
     bat_path = scheduled_tasks_dir / f"task_{task_id}.bat"
     vbs_path = scheduled_tasks_dir / f"task_{task_id}.vbs"
+
+    if 'task_id' not in json_config:
+        json_config['task_id'] = str(task_id)
     
     # json
     with open(json_path, 'w', encoding='utf-8') as f:

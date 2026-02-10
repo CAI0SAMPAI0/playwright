@@ -354,9 +354,7 @@ class App(ctk.CTk):
 
     def _start_send_thread(self):
         """
-        Inicia envio manual via processo separado.
-        
-        VERSÃO DEBUG: Mostra logs detalhados.
+        Versão MELHORADA - usa thread para não bloquear GUI.
         """
         target = self.target_input.get().strip()
         message = self.message_input.get("1.0", "end-1c").strip()
@@ -365,51 +363,36 @@ class App(ctk.CTk):
         if not self._validar_campos(target, mode, message, self.file_path): 
             return
         
-        # ===== CRIA JSON COM OS DADOS =====
+        # Cria JSON
         task_data = {
-            "task_id": None,  # Envio manual não tem ID
+            "task_id": None,
             "target": target,
             "mode": mode,
             "message": message,
             "file_path": self.file_path
         }
         
-        # Salva em arquivo temporário
         temp_dir = Path(BASE_DIR) / "temp_tasks"
         temp_dir.mkdir(exist_ok=True)
         
         timestamp = int(datetime.now().timestamp())
         json_path = temp_dir / f"manual_{timestamp}.json"
         
-        print(f"\n[DEBUG] Salvando JSON em: {json_path}")
         with open(json_path, 'w', encoding='utf-8') as f:
             json.dump(task_data, f, ensure_ascii=False, indent=2)
-        print(f"[DEBUG] JSON criado com sucesso")
         
-        # ===== LOCALIZA EXECUTOR.PY =====
+        # Localiza executor
         if getattr(sys, 'frozen', False):
-            # Se for .exe
             executor_path = Path(sys.executable).parent / "executor.py"
         else:
-            # Desenvolvimento
             executor_path = Path(BASE_DIR) / "executor.py"
         
-        print(f"[DEBUG] Executor path: {executor_path}")
-        print(f"[DEBUG] Executor existe? {executor_path.exists()}")
-        
         if not executor_path.exists():
-            messagebox.showerror(
-                "Erro Crítico", 
-                f"Arquivo executor.py não encontrado!\n\nCaminho esperado:\n{executor_path}"
-            )
+            messagebox.showerror("Erro", f"executor.py não encontrado em {executor_path}")
             return
         
-        # ===== INICIA PROCESSO =====
-        print(f"[DEBUG] Python executável: {sys.executable}")
-        print(f"[DEBUG] Comando: {sys.executable} {executor_path} {json_path}")
-        
+        # Inicia processo
         try:
-            # Windows: sem janela
             if sys.platform == 'win32':
                 creationflags = subprocess.CREATE_NO_WINDOW
             else:
@@ -421,29 +404,77 @@ class App(ctk.CTk):
                 stderr=subprocess.PIPE,
                 creationflags=creationflags,
                 cwd=str(BASE_DIR),
-                encoding='utf-8',
+                encoding='utf-8',  # ← Faz communicate() retornar STR
                 errors='replace'
             )
             
-            print(f"[DEBUG] Processo iniciado com PID: {processo.pid}")
-            
-            # ===== MONITORA EXECUÇÃO =====
-            self._monitorar_processo_debug(processo, json_path)
+            # ✅ NOVA ABORDAGEM: Thread separada para monitorar
+            monitor_thread = threading.Thread(
+                target=self._aguardar_processo_em_thread,
+                args=(processo, json_path),
+                daemon=False  # ← NÃO é daemon (aguarda terminar)
+            )
+            monitor_thread.start()
             
         except Exception as e:
-            print(f"[DEBUG ERRO] Falha ao iniciar processo: {e}")
             traceback.print_exc()
             messagebox.showerror("Erro", f"Falha ao iniciar executor:\n{str(e)}")
 
+    def _aguardar_processo_em_thread(self, processo, json_path):
+        """
+        Roda em thread SEPARADA para não bloquear GUI.
+        """
+        # Bloqueia ESTA thread até o processo terminar (GUI continua livre)
+        stdout, stderr = processo.communicate()
+        retcode = processo.returncode
+        
+        # Volta para thread principal para atualizar GUI
+        self.after(0, lambda: self._processar_resultado_processo(
+            retcode, stdout, stderr, json_path
+        ))
+
+    def _processar_resultado_processo(self, retcode, stdout, stderr, json_path):
+        """
+        Roda na thread PRINCIPAL (seguro para atualizar GUI).
+        """
+        print(f"[DEBUG] Processo terminou com código: {retcode}")
+        print(f"[DEBUG] STDOUT: {stdout if stdout else '(vazio)'}")
+        print(f"[DEBUG] STDERR: {stderr if stderr else '(vazio)'}")
+        
+        status_file = Path(json_path).with_suffix('.status')
+        
+        if retcode == 0:
+            messagebox.showinfo("Sucesso", "Mensagem enviada!")
+            self._reset_fields()
+            contador_execucao(True)
+            self.atualizar_contador_exibicao()
+        else:
+            erro_msg = "Erro desconhecido"
+            
+            if status_file.exists():
+                with open(status_file, encoding='utf-8') as f:
+                    erro_msg = f.read()
+            elif stderr:
+                erro_msg = stderr
+            
+            messagebox.showerror("Erro", f"Falha no envio:\n\n{erro_msg}")
+        
+        # Limpa temp files
+        try:
+            json_path.unlink()
+            if status_file.exists():
+                status_file.unlink()
+        except Exception as e:
+            print(f"[DEBUG] Erro ao limpar: {e}")
+
     def _monitorar_processo_debug(self, processo, json_path):
         """
-        Versão DEBUG do monitor - mostra TUDO que acontece.
+        Versão CORRIGIDA - sem .decode() em strings.
         """
         def check():
             retcode = processo.poll()
             
             if retcode is None:
-                # Ainda rodando
                 print(f"[DEBUG] Processo ainda rodando... (PID {processo.pid})")
                 self.after(1000, check)
                 return
@@ -451,45 +482,31 @@ class App(ctk.CTk):
             # ===== PROCESSO TERMINOU =====
             print(f"\n[DEBUG] Processo terminou com código: {retcode}")
             
-            # Captura stdout e stderr
+            # FIX: communicate() JÁ retorna strings (por causa de encoding='utf-8' no Popen)
             stdout, stderr = processo.communicate()
             
             print(f"[DEBUG] ===== STDOUT =====")
-            if stdout:
-                print(stdout.decode('utf-8', errors='replace'))
-            else:
-                print("(vazio)")
+            print(stdout if stdout else "(vazio)")
             
             print(f"\n[DEBUG] ===== STDERR =====")
-            if stderr:
-                print(stderr.decode('utf-8', errors='replace'))
-            else:
-                print("(vazio)")
+            print(stderr if stderr else "(vazio)")  # ✅ SEM .decode()
             
-            # Verifica arquivo de status
+            # Resto do código continua igual...
             status_file = Path(json_path).with_suffix('.status')
-            print(f"\n[DEBUG] Procurando status em: {status_file}")
-            print(f"[DEBUG] Status file existe? {status_file.exists()}")
             
             if retcode == 0:
-                # Sucesso
                 messagebox.showinfo("Sucesso", "Mensagem enviada!")
                 self._reset_fields()
                 contador_execucao(True)
                 self.atualizar_contador_exibicao()
             else:
-                # Falha
                 erro_msg = "Erro desconhecido"
                 
                 if status_file.exists():
                     with open(status_file, encoding='utf-8') as f:
                         erro_msg = f.read()
-                    print(f"[DEBUG] Conteúdo do status file:\n{erro_msg}")
-                else:
-                    # Usa stderr se status file não existir
-                    if stderr:
-                        erro_msg = stderr.decode('utf-8', errors='replace')
-                        print(f"[DEBUG] Usando stderr como erro:\n{erro_msg}")
+                elif stderr:
+                    erro_msg = stderr  # ✅ Já é string
                 
                 messagebox.showerror("Erro", f"Falha no envio:\n\n{erro_msg}")
             
@@ -501,7 +518,6 @@ class App(ctk.CTk):
             except Exception as e:
                 print(f"[DEBUG] Erro ao limpar temp files: {e}")
         
-        # Inicia verificação
         print(f"[DEBUG] Iniciando monitoramento...")
         self.after(1000, check)
 
