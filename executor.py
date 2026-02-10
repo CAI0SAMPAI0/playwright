@@ -1,133 +1,104 @@
+#!/usr/bin/env python3
+"""
+EXECUTOR ISOLADO - Roda automação em processo separado.
+
+Chamado por:
+- GUI (subprocess manual)
+- Task Scheduler (.bat)
+
+NÃO importa CustomTkinter (economia de memória).
+"""
+
 import sys
 import os
-import traceback
-import datetime
-import time
-from core import automation
+import json
+from pathlib import Path
+from datetime import datetime
 
-# =========================
-# BASE DIR (compatível com EXE)
-# =========================
-if getattr(sys, "frozen", False):
-    BASE_DIR = os.path.dirname(sys.executable)
-else:
-    BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+# ===== SETUP DE PATHS =====
+# Garante que imports funcionem mesmo quando chamado pelo .bat
+BASE_DIR = Path(__file__).parent.absolute()
+sys.path.insert(0, str(BASE_DIR))
 
-os.chdir(BASE_DIR)
-if BASE_DIR not in sys.path:
-    sys.path.insert(0, BASE_DIR)
-
-# =========================
-# IMPORTS INTERNOS
-# =========================
-from data.database import (
-    get_task_by_id,
-    update_status,
-    increment_attempts,
-    update_last_error
-)
-
-from core.logger import get_logger
+from core.db import get_db
 from core.automation import executar_envio
+from core.logger import get_logger
+from core.paths import get_whatsapp_profile_dir
 
-# =========================
-# CONFIG
-# =========================
-DEFAULT_UPLOAD_DELAY = 2.5  # segundos extras para arquivos grandes
-
-# =========================
-# CHROME PROFILE FIXO
-# =========================
-def get_user_chrome_profile_dir():
-    base_dir = os.environ.get("LOCALAPPDATA")
-
-    if not base_dir:
-        base_dir = os.path.expanduser("~")
-
-    profile = os.path.join(
-        base_dir,
-        "WhatsAppAutomation",
-        "perfil_bot_whatsapp"
-    )
-
-    os.makedirs(profile, exist_ok=True)
-    return profile
-
-
-
-# =========================
-# MAIN
-# =========================
-def main(task_id: str):
-    # ===== LOG =====
-    log_date = datetime.datetime.now().strftime("%Y-%m-%d")
-    LOG_DIR = os.path.join(BASE_DIR, "logs", log_date)
-    os.makedirs(LOG_DIR, exist_ok=True)
-
-    log_file = os.path.join(LOG_DIR, f"task_{task_id}.log")
-    logger = get_logger(task_id, log_file)
-
+def main(json_path: str):
+    """
+    Executa uma tarefa a partir de arquivo JSON.
+    
+    Args:
+        json_path: Caminho para task_X.json
+    """
+    # ===== LOGGING =====
+    log_dir = BASE_DIR / "logs" / datetime.now().strftime("%Y-%m-%d")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    
+    task_name = Path(json_path).stem  # "task_123"
+    logger = get_logger(task_name, log_dir / f"{task_name}.log")
+    
     logger.info("=" * 70)
-    logger.info(f"EXECUTOR INICIADO | task_id={task_id}")
-    logger.info(f"BASE_DIR={BASE_DIR}")
-
+    logger.info(f"EXECUTOR INICIADO | JSON: {json_path}")
+    
     try:
-        # ===== SET RUNNING =====
-        update_status(task_id, "RUNNING")
-
-        # ===== LOAD TASK =====
-        task = get_task_by_id(task_id)
-        if not task:
-            raise RuntimeError(f"Tarefa {task_id} não encontrada")
-
-        logger.info(
-            f"TASK | target={task['target']} | "
-            f"mode={task['mode']} | "
-            f"file={task['file_path']}"
-        )
-
-        # ===== CHROME PROFILE =====
-        user_profile_dir = get_user_chrome_profile_dir()
-        logger.info(f"Chrome profile: {user_profile_dir}")
-
-        # ===== DELAY EXTRA =====
-        time.sleep(DEFAULT_UPLOAD_DELAY)
-
-        # ===== EXECUÇÃO =====
+        # ===== CARREGAR DADOS =====
+        with open(json_path, 'r', encoding='utf-8') as f:
+            dados = json.load(f)
+        
+        task_id = dados.get("task_id")
+        logger.info(f"Task ID: {task_id}")
+        
+        # ===== ATUALIZAR STATUS NO BANCO =====
+        db = get_db()
+        if task_id:
+            db.atualizar_status(task_id, "running")
+        
+        # ===== EXECUTAR AUTOMAÇÃO (ISOLADA) =====
+        # Usa perfil SEPARADO do agendador (nunca conflita com GUI)
+        profile_dir = get_whatsapp_profile_dir(modo='scheduler')
+        logger.info(f"Perfil: {profile_dir}")
+        
         executar_envio(
-            userdir=user_profile_dir,
-            target=task["target"],
-            mode=task["mode"],
-            message=task.get("message"),
-            file_path=task.get("file_path"),
+            userdir=profile_dir,
+            target=dados["target"],
+            mode=dados["mode"],
+            message=dados.get("message"),
+            file_path=dados.get("file_path"),
             logger=logger,
-            modo_execucao='auto'
+            modo_execucao='auto'  # Janela minimizada
         )
-
-        # ===== FINALIZA =====
-        update_status(task_id, "COMPLETED")
-        logger.info("Tarefa concluída com sucesso")
+        
+        # ===== SUCESSO =====
+        if task_id:
+            db.atualizar_status(task_id, "completed")
+        
+        logger.info("✅ TAREFA CONCLUÍDA COM SUCESSO")
         logger.info("=" * 70)
-
         sys.exit(0)
-
+        
     except Exception as e:
-        logger.error("ERRO DURANTE EXECUÇÃO")
-        logger.error(traceback.format_exc())
-
-        increment_attempts(task_id)
-        update_last_error(task_id, str(e))
-        update_status(task_id, "FAILED")
-
+        # ===== FALHA =====
+        import traceback
+        erro = traceback.format_exc()
+        
+        logger.error("❌ ERRO NA EXECUÇÃO:")
+        logger.error(erro)
+        
+        if task_id:
+            db.registrar_erro(task_id, str(e))
+        
+        # Grava arquivo de status para GUI ler
+        status_file = Path(json_path).with_suffix('.status')
+        with open(status_file, 'w') as f:
+            f.write(f"FAILED: {str(e)}")
+        
         sys.exit(1)
 
-
-# =========================
-# ENTRYPOINT
-# =========================
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Uso: executor.exe <task_id>")
+        print("Uso: executor.py <caminho_para_task.json>")
         sys.exit(2)
-
+    
     main(sys.argv[1])

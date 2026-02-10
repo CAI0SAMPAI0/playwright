@@ -4,7 +4,6 @@ import time
 import sys
 import json
 import pyperclip
-from playwright.sync_api import sync_playwright
 from core.paths import get_chrome_path
 
 def _log(logger, msg):
@@ -51,6 +50,7 @@ def contador_execucao(incrementar=True):
     return count
 
 def iniciar_driver(userdir, modo_execucao='manual', logger=None):
+    from playwright.sync_api import sync_playwright
     userdir = os.path.abspath(userdir)
     os.makedirs(userdir, exist_ok=True)
 
@@ -248,7 +248,7 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
     # 4. Enviar 
     _log(logger, "🚀 Enviando...")
     seletores_enviar = [
-        "css=#app > div > div > div.x78zum5.xdt5ytf.x5yr21d > div > div.x10l6tqk.x13vifvy.x1o0tod.x78zum5.xh8yej3.x5yr21d.x6ikm8r.x10wlt62.x47corl > div.x9f619.x1n2onr6.x5yr21d.x6ikm8r.x10wlt62.x17dzmu4.x1i1dayz.x2ipvbc.xjdofhw.xyyilfv.x1iyjqo2.xpilrb4.x1t7ytsu.x1vb5itz.x12xzxwr > div > span > div > div > div > div.x1n2onr6.xupqr0c.x78zum5.x1r8uery.x1iyjqo2.xdt5ytf.x1hc1fzr.x6ikm8r.x10wlt62.x1anedsm > div > div.x78zum5.x1c4vz4f.x2lah0s.x1helyrv.x6s0dn4.x1qughib.x178xt8z.x13fuv20.xx42vgk.x1y1aw1k.xwib8y2.xf7dkkf.xv54qhq > div.x1247r65.xng8ra > span > div > div.x78zum5.x6s0dn4.xl56j7k.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x1f6kntn.xk50ysn.xtvhhri.x1c9tyrk.xeusxvb.x1pahc9y.x1ertn4p.xu306ak.x12s1jxh.xkdsq27.xwwtwea.x1gfkgh9.x1247r65.xng8ra.x1pse0pq.xfn3atn > span"
+        "css=#app > div > div > div.x78zum5.xdt5ytf.x5yr21d > div > div.x10l6tqk.x13vifvy.x1o0tod.x78zum5.xh8yej3.x5yr21d.x6ikm8r.x10wlt62.x47corl > div.x9f619.x1n2onr6.x5yr21d.x6ikm8r.x10wlt62.x17dzmu4.x1i1dayz.x2ipvbc.xjdofhw.xyyilfv.x1iyjqo2.xpilrb4.x1t7ytsu.x1vb5itz.x12xzxwr > div > span > div > div > div > div.x1n2onr6.xupqr0c.x78zum5.x1r8uery.x1iyjqo2.xdt5ytf.x1hc1fzr.x6ikm8r.x10wlt62.x1anedsm > div > div.x78zum5.x1c4vz4f.x2lah0s.x1helyrv.x6s0dn4.x1qughib.x178xt8z.x13fuv20.xx42vgk.x1y1aw1k.xwib8y2.xf7dkkf.xv54qhq > div.x1247r65.xng8ra > span > div > div.x78zum5.x6s0dn4.xl56j7k.xexx8yu.xyri2b.x18d9i69.x1c1uobl.x1f6kntn.xk50ysn.xtvhhri.x1c9tyrk.xeusxvb.x1pahc9y.x1ertn4p.xu306ak.x12s1jxh.xkdsq27.xwwtwea.x1gfkgh9.x1247r65.xng8ra.x1pse0pq.xfn3atn > span",
         "xpath=//span[@data-icon='send']",
         "xpath=//div[@role='button' and @aria-label='Enviar']",
         "xpath=//*[@id='app']/div/div/div[3]/div/div[3]/div[2]/div/span/div/div/div/div[2]/div/div[2]/div[2]/span/div/div/span",
@@ -282,16 +282,26 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
     else:
         page.keyboard.press("Enter") # plano B
 
+import asyncio
+
 def executar_envio(userdir, target, mode, message=None, file_path=None, logger=None, modo_execucao='manual'):
     pw, context, page = None, None, None
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    except:
+        pass
+
+    from playwright.sync_api import sync_playwright
+    
     try:
         pw, context, page = iniciar_driver(userdir, modo_execucao, logger)
         
         search_box = page.locator('div[contenteditable="true"][data-tab="3"]')
         search_box.fill(target)
-        time.sleep(2)
+        time.sleep(5)
         page.keyboard.press("Enter")
-        time.sleep(3)
+        time.sleep(5)
 
         if mode == "text":
             chat_box = page.locator('div[contenteditable="true"][data-tab="10"]')

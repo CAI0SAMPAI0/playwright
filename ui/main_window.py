@@ -4,6 +4,9 @@ import os
 import sys
 import traceback
 import threading
+import subprocess
+import json
+from pathlib import Path
 from datetime import datetime, timedelta
 from tkinter import filedialog, messagebox
 
@@ -350,28 +353,167 @@ class App(ctk.CTk):
         return m.get(val, "text")
 
     def _start_send_thread(self):
-        """Wrapper para rodar o envio em uma thread separada e não travar a UI."""
+        """
+        Inicia envio manual via processo separado.
+        
+        VERSÃO DEBUG: Mostra logs detalhados.
+        """
         target = self.target_input.get().strip()
         message = self.message_input.get("1.0", "end-1c").strip()
         mode = self._get_mode_key()
         
-        if not self._validar_campos(target, mode, message, self.file_path): return
+        if not self._validar_campos(target, mode, message, self.file_path): 
+            return
         
-        # Inicia a thread como daemon (fecha se o app fechar)
-        threading.Thread(target=self._send_logic, args=(target, message, mode), daemon=True).start()
+        # ===== CRIA JSON COM OS DADOS =====
+        task_data = {
+            "task_id": None,  # Envio manual não tem ID
+            "target": target,
+            "mode": mode,
+            "message": message,
+            "file_path": self.file_path
+        }
+        
+        # Salva em arquivo temporário
+        temp_dir = Path(BASE_DIR) / "temp_tasks"
+        temp_dir.mkdir(exist_ok=True)
+        
+        timestamp = int(datetime.now().timestamp())
+        json_path = temp_dir / f"manual_{timestamp}.json"
+        
+        print(f"\n[DEBUG] Salvando JSON em: {json_path}")
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(task_data, f, ensure_ascii=False, indent=2)
+        print(f"[DEBUG] JSON criado com sucesso")
+        
+        # ===== LOCALIZA EXECUTOR.PY =====
+        if getattr(sys, 'frozen', False):
+            # Se for .exe
+            executor_path = Path(sys.executable).parent / "executor.py"
+        else:
+            # Desenvolvimento
+            executor_path = Path(BASE_DIR) / "executor.py"
+        
+        print(f"[DEBUG] Executor path: {executor_path}")
+        print(f"[DEBUG] Executor existe? {executor_path.exists()}")
+        
+        if not executor_path.exists():
+            messagebox.showerror(
+                "Erro Crítico", 
+                f"Arquivo executor.py não encontrado!\n\nCaminho esperado:\n{executor_path}"
+            )
+            return
+        
+        # ===== INICIA PROCESSO =====
+        print(f"[DEBUG] Python executável: {sys.executable}")
+        print(f"[DEBUG] Comando: {sys.executable} {executor_path} {json_path}")
+        
+        try:
+            # Windows: sem janela
+            if sys.platform == 'win32':
+                creationflags = subprocess.CREATE_NO_WINDOW
+            else:
+                creationflags = 0
+            
+            processo = subprocess.Popen(
+                [sys.executable, str(executor_path), str(json_path)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                creationflags=creationflags,
+                cwd=str(BASE_DIR)  # ← IMPORTANTE: Define diretório de trabalho
+            )
+            
+            print(f"[DEBUG] Processo iniciado com PID: {processo.pid}")
+            
+            # ===== MONITORA EXECUÇÃO =====
+            self._monitorar_processo_debug(processo, json_path)
+            
+        except Exception as e:
+            print(f"[DEBUG ERRO] Falha ao iniciar processo: {e}")
+            traceback.print_exc()
+            messagebox.showerror("Erro", f"Falha ao iniciar executor:\n{str(e)}")
+
+    def _monitorar_processo_debug(self, processo, json_path):
+        """
+        Versão DEBUG do monitor - mostra TUDO que acontece.
+        """
+        def check():
+            retcode = processo.poll()
+            
+            if retcode is None:
+                # Ainda rodando
+                print(f"[DEBUG] Processo ainda rodando... (PID {processo.pid})")
+                self.after(1000, check)
+                return
+            
+            # ===== PROCESSO TERMINOU =====
+            print(f"\n[DEBUG] Processo terminou com código: {retcode}")
+            
+            # Captura stdout e stderr
+            stdout, stderr = processo.communicate()
+            
+            print(f"[DEBUG] ===== STDOUT =====")
+            if stdout:
+                print(stdout.decode('utf-8', errors='replace'))
+            else:
+                print("(vazio)")
+            
+            print(f"\n[DEBUG] ===== STDERR =====")
+            if stderr:
+                print(stderr.decode('utf-8', errors='replace'))
+            else:
+                print("(vazio)")
+            
+            # Verifica arquivo de status
+            status_file = Path(json_path).with_suffix('.status')
+            print(f"\n[DEBUG] Procurando status em: {status_file}")
+            print(f"[DEBUG] Status file existe? {status_file.exists()}")
+            
+            if retcode == 0:
+                # Sucesso
+                messagebox.showinfo("Sucesso", "Mensagem enviada!")
+                self._reset_fields()
+                contador_execucao(True)
+                self.atualizar_contador_exibicao()
+            else:
+                # Falha
+                erro_msg = "Erro desconhecido"
+                
+                if status_file.exists():
+                    with open(status_file, encoding='utf-8') as f:
+                        erro_msg = f.read()
+                    print(f"[DEBUG] Conteúdo do status file:\n{erro_msg}")
+                else:
+                    # Usa stderr se status file não existir
+                    if stderr:
+                        erro_msg = stderr.decode('utf-8', errors='replace')
+                        print(f"[DEBUG] Usando stderr como erro:\n{erro_msg}")
+                
+                messagebox.showerror("Erro", f"Falha no envio:\n\n{erro_msg}")
+            
+            # Limpa arquivos temporários
+            try:
+                json_path.unlink()
+                if status_file.exists():
+                    status_file.unlink()
+            except Exception as e:
+                print(f"[DEBUG] Erro ao limpar temp files: {e}")
+        
+        # Inicia verificação
+        print(f"[DEBUG] Iniciando monitoramento...")
+        self.after(1000, check)
 
     def _send_logic(self, target, message, mode):
         try:
-            from playwright.sync_api import sync_playwright
+            from core import automation
             # Chama a automação (que pode demorar)
-            automation.executar_envio(
-                userdir=PROFILE_DIR, 
-                target=target, 
-                mode=mode, 
-                message=message, 
-                file_path=self.file_path, 
-                modo_execucao='manual'
-            )
+            subprocess.Popen([
+                sys.executable,
+                "executor.py",
+                "--target", target,
+                "--mode", mode,
+                "--message", message
+            ])
             # Agenda a atualização da UI para rodar na thread principal
             self.after(0, self._on_send_success)
         except Exception as e:
@@ -426,6 +568,7 @@ class App(ctk.CTk):
 
     def _criar_tarefa_agendada(self, t_id, task_name, target, mode, message, file_path, time_str, date_str):
         try:
+            from core import windows_scheduler
             json_cfg = {"target": target, "mode": mode, "message": message, "file_path": file_path}
             windows_scheduler.create_task_bat(t_id, task_name, json_cfg)
             suc, msg = windows_scheduler.create_windows_task(t_id, task_name, time_str, date_str)

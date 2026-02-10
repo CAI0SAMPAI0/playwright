@@ -22,13 +22,31 @@ def get_user_data_dir():
     os.makedirs(path, exist_ok=True)
     return path
 
-def get_whatsapp_profile_dir():
+def get_whatsapp_profile_dir(modo='gui'):
     """
-    NOVO: Caminho FIXO do perfil do WhatsApp
-    Garante que GUI e Agendador usem o mesmo local
+    Retorna perfil SEPARADO para GUI e agendador.
+    
+    Args:
+        modo: 'gui' ou 'scheduler'
+    
+    Returns:
+        Path absoluto do perfil
+    
+    IMPORTANTE: Cada modo tem seu próprio QR Code.
+    - GUI: Login uma vez, mantém sessão
+    - Scheduler: Login separado (não conflita)
     """
     base = get_app_base_dir()
-    profile = os.path.join(base, "perfil_bot_whatsapp")
+    '''profile = os.path.join(base, "perfil_bot_whatsapp")
+    os.makedirs(profile, exist_ok=True)
+    return profile'''
+    if modo =='gui':
+        return os.path.join(base, "perfil_gui")
+    elif modo == 'scheduler':
+        return os.path.join(base, "perfil_scheduler")
+    else:
+        raise ValueError(f"Modo inválido: {modo}. Use 'gui' ou 'scheduler'")
+    
     os.makedirs(profile, exist_ok=True)
     return profile
 

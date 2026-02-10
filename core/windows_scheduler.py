@@ -18,6 +18,7 @@ def create_task_bat(task_id, task_name, json_config):
     bat_path = scheduled_tasks_dir / f"task_{task_id}.bat"
     vbs_path = scheduled_tasks_dir / f"task_{task_id}.vbs"
     
+    # json
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(json_config, f, indent=2, ensure_ascii=False)
     
@@ -25,23 +26,35 @@ def create_task_bat(task_id, task_name, json_config):
     exe_path = Path(sys.executable).absolute()
 
     if getattr(sys, 'frozen', False):
-        # Se for o EXE compilado: "app.exe --auto..."
-        run_command = f'"{exe_path}" --auto "{json_path}" --task_id {task_id}'
+        # Se for .exe empacotado
+        executor_path = app_path / "executor.py"
     else:
-        # Se for rodando via Python: "python.exe app.py --auto..."
-        script_path = (app_path / "app.py").absolute()
-        run_command = f'"{exe_path}" "{script_path}" --auto "{json_path}" --task_id {task_id}'
+        # Se for desenvolvimento
+        executor_path = app_path / "executor.py"
+    run_command = f'"{exe_path}" "{executor_path}" "{json_path}"'
+    
+        # Se for o EXE compilado: "app.exe --auto..."
+    #     run_command = f'"{exe_path}" --auto "{json_path}" --task_id {task_id}'
+    # else:
+    #     # Se for rodando via Python: "python.exe app.py --auto..."
+    #     script_path = (app_path / "app.py").absolute()
+    #     run_command = f'"{exe_path}" "{script_path}" --auto "{json_path}" --task_id {task_id}'
     
     bat_content = f"""@echo off
 chcp 65001 >nul
 cd /d "{app_path}"
+echo [%date% %time%] Iniciando tarefa {task_id}
 {run_command}
-echo Iniciando automação...
+if %ERRORLEVEL% EQU 0 (
+    echo [%date% %time%] Tarefa concluida com sucesso
+) else (
+    echo [%date% %time%] Tarefa falhou com codigo %ERRORLEVEL%
+)
 exit
 """
     with open(bat_path, 'w', encoding='utf-8') as f:
         f.write(bat_content)
-
+    # vbc (silencioso)
     vbs_content = f'CreateObject("Wscript.Shell").Run chr(34) & "{bat_path}" & chr(34), 0, False'
     with open(vbs_path, 'w', encoding='utf-8') as f:
         f.write(vbs_content)
