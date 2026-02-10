@@ -134,18 +134,3 @@ Study_Practices/
 ```
 
 ---
-
-### **Estrutura do Projeto**
-playwright/
-├── core/                     # Lógica principal
-│   ├── automation.py         # Controle do Playwright
-│   ├── db.py                 # Gerenciamento do SQLite
-│   ├── logger.py             # Sistema de logs
-│   ├── paths.py              # Gerenciamento de caminhos
-│   ├── scheduler.py          # Interface de agendamento
-│   └── windows_scheduler.py  # Integração com Task Scheduler
-│
-├── ui/                       # Interface gráfica
-│   └── main_window.py        # Janela principal (CustomTkinter)
-│
-├── data/                     # Dados persistentes
