@@ -76,3 +76,76 @@ Uma aplicação Desktop robusta para automação e agendamento de mensagens no W
 ### **Onde os Dados Ficam Salvos?**
 
 Todos os dados ficam **dentro da pasta onde você extraiu o programa**:
+```
+Study_Practices/
+├── Study_Practices.exe       ← Executável principal
+├── _internal/                ← Arquivos do sistema (não mexa)
+├── perfil_bot_whatsapp/      ← Sessão do WhatsApp (login)
+├── user_data/                ← Banco de dados de agendamentos
+├── logs/                     ← Histórico de execuções
+└── scheduled_tasks/          ← Tarefas agendadas
+```
+
+**Importante:** Se quiser mover o programa para outra pasta, **mova a pasta inteira**, não apenas o `.exe` sozinho!
+
+---
+
+## 🚀 Para Desenvolvedores
+
+### **Ambiente de Desenvolvimento**
+
+#### Pré-requisitos
+* Python 3.10 ou superior
+* Google Chrome instalado
+* Git (para clonar o repositório)
+
+#### Instalação
+
+1. **Clone o repositório:**
+```bash
+   git clone https://github.com/CAI0SAMPAI0/playwright.git
+   cd playwright
+```
+
+2. **Crie e ative um ambiente virtual:**
+```bash
+   python -m venv venv
+   
+   # Windows:
+   .\venv\Scripts\activate
+   
+   # Linux/Mac:
+   source venv/bin/activate
+```
+
+3. **Instale as dependências:**
+```bash
+   pip install -r requirements.txt
+```
+
+4. **Instale o navegador do Playwright:**
+```bash
+   playwright install chromium
+```
+
+5. **Execute a aplicação:**
+```bash
+   python app.py
+```
+
+---
+
+### **Estrutura do Projeto**
+playwright/
+├── core/                     # Lógica principal
+│   ├── automation.py         # Controle do Playwright
+│   ├── db.py                 # Gerenciamento do SQLite
+│   ├── logger.py             # Sistema de logs
+│   ├── paths.py              # Gerenciamento de caminhos
+│   ├── scheduler.py          # Interface de agendamento
+│   └── windows_scheduler.py  # Integração com Task Scheduler
+│
+├── ui/                       # Interface gráfica
+│   └── main_window.py        # Janela principal (CustomTkinter)
+│
+├── data/                     # Dados persistentes
