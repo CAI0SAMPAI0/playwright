@@ -6,25 +6,10 @@ from typing import List, Tuple, Optional
 from pathlib import Path
 from core.paths import get_user_data_dir
 
-
-# =============================
 # CONFIGURAÇÃO DE CAMINHOS
-# =============================
-'''if getattr(sys, 'frozen', False):
-    BASE_DIR = Path(sys.executable).parent
-else:
-    BASE_DIR = Path(__file__).parent.parent.absolute()
-
-DATA_DIR = BASE_DIR / "data"
-DB_PATH = DATA_DIR / "scheduler.db"
-
-# Garante que diretório existe
-DATA_DIR.mkdir(parents=True, exist_ok=True)'''
 
 DATA_DIR = Path(get_user_data_dir())
 DB_PATH = DATA_DIR / "scheduler.db"
-
-
 class SchedulerDB:
     """
     Gerenciador do banco de dados SQLite para agendamentos.
@@ -58,8 +43,9 @@ class SchedulerDB:
         """
         conn = sqlite3.connect(
             str(self.db_path),
-            timeout=30,
+            timeout=60,
             detect_types=sqlite3.PARSE_DECLTYPES,
+            isolation_level=None
         )
 
         # ===== ATIVA WAL MODE =====
@@ -67,6 +53,15 @@ class SchedulerDB:
 
         # ===== CONFIGURA CACHE =====
         conn.execute("PRAGMA cache_size=10000")  # 10MB cache
+
+        # ===== FORÇA SINCRONIZAÇÃO =====
+        conn.execute("PRAGMA synchronous=NORMAL")  # Balanceamento
+        
+        # ===== CHECKPOINT AUTOMÁTICO =====
+        conn.execute("PRAGMA wal_autocheckpoint=1000")  # Merge a cada 1000 páginas
+        
+        # ===== FORÇA LEITURA ATUALIZADA =====
+        conn.execute("PRAGMA read_uncommitted=0")  # Garante leitura de dados commitados
 
         return conn
 
@@ -93,7 +88,7 @@ class SchedulerDB:
         )
         """)
 
-        conn.commit()
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         conn.close()
 
         print(f"✓ Database inicializado: {self.db_path}")
@@ -138,8 +133,9 @@ class SchedulerDB:
                 json_path
             ))
 
-            conn.commit()
+            #conn.commit()
             task_id = cur.lastrowid
+            conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
 
             print(f"✓ Agendamento criado: ID={task_id}, task_name={task_name}")
             return task_id
@@ -224,7 +220,8 @@ class SchedulerDB:
                 SET target = ?, mode = ?, message = ?, file_path = ?, scheduled_time = ?, status = 'pending'
                 WHERE id = ?
             """, (target, mode, message, file_path, scheduled_time.isoformat(), task_id))
-            conn.commit()
+            #conn.commit()
+            conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
             return True
         except Exception as e:
             print(f"Erro ao editar DB: {e}")
@@ -292,7 +289,7 @@ class SchedulerDB:
                 WHERE task_name = ?
             """, (status, now, error_message, identificador))
 
-        conn.commit()
+        conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
         conn.close()
 
         print(f"✓ Status atualizado: {identificador} → {status}")
@@ -317,7 +314,7 @@ class SchedulerDB:
             cur.execute(
                 "DELETE FROM agendamentos WHERE task_name = ?", (identificador,))
 
-        conn.commit()
+        conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
         conn.close()
 
         print(f"✓ Agendamento deletado: {identificador}")

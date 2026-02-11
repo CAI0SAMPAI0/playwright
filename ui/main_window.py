@@ -24,6 +24,16 @@ PROFILE_DIR = get_whatsapp_profile_dir()
 THEME_FILE = os.path.join(BASE_DIR, "data", "theme_pref.txt")
 GEOMETRY_FILE = os.path.join(BASE_DIR, "data", "window_pos.txt")
 
+DEBUG_LOG = os.path.join(BASE_DIR, "gui_sync_debug.log")
+
+def debug_log(msg):
+    """Helper para log de debug de sincronização"""
+    try:
+        with open(DEBUG_LOG, 'a', encoding='utf-8') as f:
+            f.write(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] {msg}\n")
+    except:
+        pass
+
 def get_executor_path():
     """
     Retorna o caminho correto do executor.py independente de estar empacotado ou não.
@@ -59,6 +69,9 @@ class App(ctk.CTk):
         self.cards_agendamentos = {}
         self.temp_edit_file = None # Variável temporária para janela de edição
 
+        # cache de estados para detectar mudança
+        self.last_states = {}
+
         # --- Sequência de Inicialização ---
         self._restaurar_geometria()
         self._carregar_tema_salvo()
@@ -86,7 +99,7 @@ class App(ctk.CTk):
         # --- Eventos e Loop ---
         self.protocol("WM_DELETE_WINDOW", self._ao_fechar)
         # Inicia loop de atualização após 5s
-        self.after(5000, self._loop_atualizacao)
+        self.after(2000, self._loop_atualizacao)
 
     # =========================================
     #            HELPERS E SISTEMA
@@ -147,7 +160,7 @@ class App(ctk.CTk):
         self._salvar_tema(mode)
 
     def _loop_atualizacao(self):
-        """Loop silencioso de atualização a cada 5 segundos."""
+        """Loop silencioso de atualização a cada 2 segundos."""
         try:
             self._carregar_agendamentos()
             self.atualizar_contador_exibicao()
@@ -156,7 +169,7 @@ class App(ctk.CTk):
             with open("ui_errors.log", "a", encoding="utf-8") as f:
                 f.write(f"[{datetime.now()}] {traceback.format_exc()}\n")
         finally:
-            self.after(5000, self._loop_atualizacao)
+            self.after(2000, self._loop_atualizacao)
 
     def atualizar_contador_exibicao(self):
         try: 
@@ -631,6 +644,9 @@ class App(ctk.CTk):
 
         btns = ctk.CTkFrame(actions, fg_color="transparent")
         btns.pack()
+
+        btn_state = "normal" if status_str not in ["running", "completed"] else "disabled"
+
         
         b_edit = ctk.CTkButton(btns, text="📝", width=30, fg_color=self.colors["primary"], hover_color=self.colors["hover"], 
                                command=lambda r=row: self._abrir_edicao(r))
