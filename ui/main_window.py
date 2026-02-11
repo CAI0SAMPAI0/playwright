@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 import traceback
 import threading
 import subprocess
@@ -151,7 +152,9 @@ class App(ctk.CTk):
             self._carregar_agendamentos()
             self.atualizar_contador_exibicao()
         except Exception as e:
-            print(f"Erro no loop: {e}")
+            import traceback
+            with open("ui_errors.log", "a", encoding="utf-8") as f:
+                f.write(f"[{datetime.now()}] {traceback.format_exc()}\n")
         finally:
             self.after(5000, self._loop_atualizacao)
 
@@ -485,9 +488,15 @@ class App(ctk.CTk):
         mode = self._get_mode_key()
         d, t = self.date_button.cget("text"), self.time_input.get().strip()
         
-        if not self._validar_campos(target, mode, message, self.file_path): return
-        if len(t) != 5: return messagebox.showerror("Erro", "Hora incompleta. Use HH:MM")
+        if not self._validar_campos(target, mode, message, self.file_path): '''return
+        if len(t) != 5: return messagebox.showerror("Erro", "Hora incompleta. Use HH:MM")'''
         
+        if not re.match(r'^([0-1][0-9]|2[0-3]):[0-5][0-9]$', t):
+            return messagebox.showerror(
+                "Erro", 
+                "Hora inválida. Use formato HH:MM (00:00 a 23:59)"
+            )
+
         try:
             dt = datetime.strptime(f"{d} {t}", "%d/%m/%Y %H:%M")
             if dt < datetime.now(): return messagebox.showerror("Erro", "O horário deve ser no futuro.")
@@ -530,53 +539,77 @@ class App(ctk.CTk):
 
     def _setup_gestao_tab(self):
         tab = self.tabview.tab("Meus Agendamentos")
+        # header com status sync 
+        header = ctk.CTkFrame(tab)
+        header.pack(fill="x", padx=10, pady=(10,5))
+    
+        self.sync_label = ctk.CTkLabel(
+        header, 
+        text="Sincronizando...", 
+        font=("Roboto", 10),
+        text_color="gray"
+        )
+        self.sync_label.pack(side="right", padx=10)
+
         self.scrollable_frame = ctk.CTkScrollableFrame(tab, label_text="Histórico")
         self.scrollable_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
     def _carregar_agendamentos(self):
         """Atualização Inteligente: Só mexe no DOM se houver mudanças."""
-        agendamentos = db.listar_todos()
-        ids_atuais = [row[0] for row in agendamentos]
+        try:
+            if hasattr(self, 'sync_label'):
+                self.sync_label.configure(text="🔄 Atualizando...", text_color="orange")
+            agendamentos = db.listar_todos()
+            ids_atuais = [row[0] for row in agendamentos]
         
-        # 1. Remove itens deletados
-        for t_id in list(self.cards_agendamentos.keys()):
-            if t_id not in ids_atuais:
-                self.cards_agendamentos[t_id]['frame'].destroy()
-                del self.cards_agendamentos[t_id]
-        
-        status_colors = {
-            "pending": self.colors["gray"], 
-            "running": "#2196F3", 
-            "completed": self.colors["success"], 
-            "failed": self.colors["danger"]
-        }
-
-        for row in agendamentos:
-            t_id, _, target, _, sched_time, status = row[0], row[1], row[2], row[3], row[4], row[5]
-            status_lower = str(status).lower()
-            cor = status_colors.get(status_lower, self.colors["gray"])
+            # 1. Remove itens deletados
+            for t_id in list(self.cards_agendamentos.keys()):
+                if t_id not in ids_atuais:
+                    self.cards_agendamentos[t_id]['frame'].destroy()
+                    del self.cards_agendamentos[t_id]
             
-            try: dt_amigavel = datetime.fromisoformat(sched_time).strftime("%d/%m/%Y %H:%M")
-            except: dt_amigavel = sched_time
+            status_colors = {
+                "pending": self.colors["gray"], 
+                "running": "#2196F3", 
+                "completed": self.colors["success"], 
+                "failed": self.colors["danger"],
+                "cancelled": "#ff9800"
+            }
 
-            # 2. Atualiza existentes (Sem piscar a tela)
-            if t_id in self.cards_agendamentos:
-                card = self.cards_agendamentos[t_id]
-                if card['status_str'] != status_lower:
-                    card['label_status'].configure(text=status_lower.upper(), text_color=cor)
-                    card['status_str'] = status_lower
-                    state = "normal" if status_lower != "running" else "disabled"
-                    card['btn_edit'].configure(state=state)
-                    card['btn_del'].configure(state=state)
+            for row in agendamentos:
+                t_id, _, target, _, sched_time, status = row[0], row[1], row[2], row[3], row[4], row[5]
+                status_lower = str(status).lower()
+                cor = status_colors.get(status_lower, self.colors["gray"])
                 
-                if card['label_target'].cget("text") != f"📱 {target}":
-                    card['label_target'].configure(text=f"📱 {target}")
-                if card['label_date'].cget("text") != f"📅 {dt_amigavel}":
-                    card['label_date'].configure(text=f"📅 {dt_amigavel}")
+                try: dt_amigavel = datetime.fromisoformat(sched_time).strftime("%d/%m/%Y %H:%M")
+                except: dt_amigavel = sched_time
 
-            # 3. Cria novos
-            else:
-                self._criar_card_agendamento(t_id, row, target, dt_amigavel, status_lower, cor)
+                # 2. Atualiza existentes (Sem piscar a tela)
+                if t_id in self.cards_agendamentos:
+                    card = self.cards_agendamentos[t_id]
+                    if card['status_str'] != status_lower:
+                        card['label_status'].configure(text=status_lower.upper(), text_color=cor)
+                        card['status_str'] = status_lower
+                        state = "normal" if status_lower != "running" else "disabled"
+                        card['btn_edit'].configure(state=state)
+                        card['btn_del'].configure(state=state)
+                    
+                    if card['label_target'].cget("text") != f"📱 {target}":
+                        card['label_target'].configure(text=f"📱 {target}")
+                    if card['label_date'].cget("text") != f"📅 {dt_amigavel}":
+                        card['label_date'].configure(text=f"📅 {dt_amigavel}")
+
+                # 3. Cria novos
+                else:
+                    self._criar_card_agendamento(t_id, row, target, dt_amigavel, status_lower, cor)
+            if hasattr(self, 'sync_label'):
+                self.sync_label.configure(
+                    text=f"✅ Última atualização: {datetime.now().strftime('%H:%M:%S')}", 
+                    text_color="green"
+                )
+        except Exception as e:
+            self.sync_label.configure(text="❌ Erro na sincronização", text_color="red")
+            raise
 
     def _criar_card_agendamento(self, t_id, row, target, dt_text, status_str, status_color):
         card = ctk.CTkFrame(self.scrollable_frame, border_width=1)

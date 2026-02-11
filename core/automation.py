@@ -287,17 +287,8 @@ def enviar_arquivo_com_mensagem(page, file_path, message, logger=None):
     else:
         page.keyboard.press("Enter") # plano B
 
-import asyncio
-
 def executar_envio(userdir, target, mode, message=None, file_path=None, logger=None, modo_execucao='manual'):
     pw, context, page = None, None, None
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    except:
-        pass
-
-    from playwright.sync_api import sync_playwright
     
     try:
         pw, context, page = iniciar_driver(userdir, modo_execucao, logger)
