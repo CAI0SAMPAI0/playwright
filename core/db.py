@@ -55,15 +55,30 @@ class SchedulerDB:
         conn.execute("PRAGMA cache_size=10000")  # 10MB cache
 
         # ===== FORÇA SINCRONIZAÇÃO =====
-        conn.execute("PRAGMA synchronous=NORMAL")  # Balanceamento
+        conn.execute("PRAGMA synchronous=FULL")  # SEGURANÇA MÁXIMA
         
         # ===== CHECKPOINT AUTOMÁTICO =====
-        conn.execute("PRAGMA wal_autocheckpoint=1000")  # Merge a cada 1000 páginas
+        conn.execute("PRAGMA wal_autocheckpoint=1")  # Merge a cada operação
         
         # ===== FORÇA LEITURA ATUALIZADA =====
         conn.execute("PRAGMA read_uncommitted=0")  # Garante leitura de dados commitados
 
         return conn
+
+    def _force_sync(self, conn):
+        """
+        ⚠️ NOVO: Força sincronização AGRESSIVA do banco
+        """
+        try:
+            # Tenta FULL primeiro (mais garantido)
+            conn.execute("PRAGMA wal_checkpoint(FULL)")
+        except:
+            try:
+                # Se falhar, tenta TRUNCATE
+                conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            except:
+                # Última tentativa: RESTART
+                conn.execute("PRAGMA wal_checkpoint(RESTART)")
 
     def _init_db(self):
         """Cria tabela se não existir"""
@@ -135,7 +150,7 @@ class SchedulerDB:
 
             #conn.commit()
             task_id = cur.lastrowid
-            conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+            self._force_sync(conn)
 
             print(f"✓ Agendamento criado: ID={task_id}, task_name={task_name}")
             return task_id
@@ -276,6 +291,14 @@ class SchedulerDB:
         cur = conn.cursor()
         now = datetime.datetime.now().isoformat()
 
+        # ===== LOG DE DEBUG =====
+        print(f"\n{'='*60}")
+        print(f"[DB] ATUALIZANDO STATUS")
+        print(f"[DB] Identificador: {identificador}")
+        print(f"[DB] Novo status: {status}")
+        print(f"[DB] Timestamp: {now}")
+        print(f"{'='*60}\n")
+
         if isinstance(identificador, int):
             cur.execute("""
                 UPDATE agendamentos
@@ -289,8 +312,38 @@ class SchedulerDB:
                 WHERE task_name = ?
             """, (status, now, error_message, identificador))
 
-        conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+        # ===== VERIFICAÇÃO =====
+        if cur.rowcount == 0:
+            print(f"[DB] ⚠️ AVISO: Nenhuma linha foi atualizada! Identificador pode estar errado.")
+        else:
+            print(f"[DB] ✓ {cur.rowcount} linha(s) atualizada(s)")
+
+        # ✅ FORÇA SINCRONIZAÇÃO TRIPLA (para garantir)
+        self._force_sync(conn)
+        conn.execute("PRAGMA wal_checkpoint(FULL)")
         conn.close()
+
+        # ===== VERIFICAÇÃO PÓS-SYNC =====
+        # Re-abre conexão para verificar se realmente salvou
+        conn_verify = self._get_conn()
+        cur_verify = conn_verify.cursor()
+        
+        if isinstance(identificador, int):
+            cur_verify.execute("SELECT status FROM agendamentos WHERE id = ?", (identificador,))
+        else:
+            cur_verify.execute("SELECT status FROM agendamentos WHERE task_name = ?", (identificador,))
+        
+        row = cur_verify.fetchone()
+        conn_verify.close()
+        
+        if row:
+            status_verificado = row[0]
+            if status_verificado == status:
+                print(f"[DB] ✓✓ VERIFICAÇÃO OK: Status confirmado como '{status}'")
+            else:
+                print(f"[DB] ❌ ERRO: Status está '{status_verificado}' mas deveria ser '{status}'")
+        else:
+            print(f"[DB] ❌ ERRO: Registro não encontrado na verificação!")
 
         print(f"✓ Status atualizado: {identificador} → {status}")
 
@@ -314,6 +367,7 @@ class SchedulerDB:
             cur.execute(
                 "DELETE FROM agendamentos WHERE task_name = ?", (identificador,))
 
+        self._force_sync(conn)
         conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
         conn.close()
 
