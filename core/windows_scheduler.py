@@ -19,7 +19,7 @@ def create_task_bat(task_id, task_name, json_config):
     vbs_path = scheduled_tasks_dir / f"task_{task_id}.vbs"
 
     if 'task_id' not in json_config:
-        json_config['task_id'] = str(task_id)
+        json_config['task_id'] = task_id  # ✅ Mantém como inteiro!
     
     # json
     with open(json_path, 'w', encoding='utf-8') as f:
@@ -59,7 +59,7 @@ exit
 
 def create_windows_task(task_id, task_name, schedule_time, schedule_date=None):
     """
-    Cria uma tarefa agendada no Windows usando XML
+    Cria uma tarefa agendada no Windows usando parâmetros diretos (SEM XML)
     
     Args:
         task_id: ID único da tarefa
@@ -71,80 +71,33 @@ def create_windows_task(task_id, task_name, schedule_time, schedule_date=None):
         tuple: (sucesso: bool, mensagem: str)
     """
     vbs_path = APP_PATH / "scheduled_tasks" / f"task_{task_id}.vbs"
-    xml_path = APP_PATH / "scheduled_tasks" / f"task_{task_id}.xml"
 
-    # Converte data e hora para o formato ISO
+    # Converte data e hora para o formato que o schtasks aceita
     if not schedule_date:
         schedule_date = datetime.now().strftime("%d/%m/%Y")
     
     try:
-        # Combina data e hora
+        # Valida data e hora
         dt_str = f"{schedule_date} {schedule_time}"
         dt = datetime.strptime(dt_str, "%d/%m/%Y %H:%M")
-        
-        # Formata para o XML (ISO 8601)
-        start_boundary = dt.strftime("%Y-%m-%dT%H:%M:%S")
-        
-        # EndBoundary: 1 hora após o início (pode ajustar conforme necessário)
-        end_boundary = (dt + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S")
         
     except Exception as e:
         return False, f"Erro ao processar data/hora: {str(e)}"
 
-    # Template XML completo e válido
-    xml_content = f"""<?xml version="1.0" encoding="UTF-16"?>
-<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo>
-    <Description>WhatsApp Automation Task</Description>
-  </RegistrationInfo>
-  <Triggers>
-    <TimeTrigger>
-      <StartBoundary>{start_boundary}</StartBoundary>
-      <EndBoundary>{end_boundary}</EndBoundary>
-      <Enabled>true</Enabled>
-    </TimeTrigger>
-  </Triggers>
-  <Principals>
-    <Principal id="Author">
-      <RunLevel>HighestAvailable</RunLevel>
-    </Principal>
-  </Principals>
-  <Settings>
-    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
-    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
-    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
-    <AllowHardTerminate>true</AllowHardTerminate>
-    <StartWhenAvailable>true</StartWhenAvailable>
-    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
-    <IdleSettings>
-      <StopOnIdleEnd>false</StopOnIdleEnd>
-      <RestartOnIdle>false</RestartOnIdle>
-    </IdleSettings>
-    <AllowStartOnDemand>true</AllowStartOnDemand>
-    <Enabled>true</Enabled>
-    <Hidden>false</Hidden>
-    <RunOnlyIfIdle>false</RunOnlyIfIdle>
-    <WakeToRun>false</WakeToRun>
-    <ExecutionTimeLimit>PT1H</ExecutionTimeLimit>
-    <Priority>7</Priority>
-  </Settings>
-  <Actions Context="Author">
-    <Exec>
-      <Command>{vbs_path}</Command>
-    </Exec>
-  </Actions>
-</Task>"""
-
-    # Salva o XML
-    try:
-        with open(xml_path, 'w', encoding='utf-16') as f:
-            f.write(xml_content)
-    except Exception as e:
-        return False, f"Erro ao criar arquivo XML: {str(e)}"
-
-    # Importa a tarefa usando o XML
+    # Nome completo da tarefa
     task_full_name = f"AutoMessage_{task_id}"
-    cmd = f'schtasks /create /tn "{task_full_name}" /xml "{xml_path}" /f'
+    
+    # Comando schtasks com parâmetros diretos (NÃO precisa de admin)
+    cmd = (
+        f'schtasks /create '
+        f'/tn "{task_full_name}" '
+        f'/tr "{vbs_path}" '
+        f'/sc once '
+        f'/sd {schedule_date} '
+        f'/st {schedule_time} '
+        f'/rl limited '  # Executa com privilégios normais (não admin)
+        f'/f'  # Força criação (sobrescreve se existir)
+    )
 
     try:
         result = subprocess.run(
@@ -164,12 +117,7 @@ def create_windows_task(task_id, task_name, schedule_time, schedule_date=None):
             return False, f"Erro ao criar tarefa: {erro}"
         
         print(f"[OK] Tarefa {task_full_name} criada com sucesso")
-        
-        # Remove o XML temporário (opcional)
-        try:
-            xml_path.unlink()
-        except:
-            pass
+        print(f"[INFO] Agendada para: {schedule_date} às {schedule_time}")
             
         return True, "Agendamento criado com sucesso"
         

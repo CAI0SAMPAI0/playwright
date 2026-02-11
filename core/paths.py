@@ -40,9 +40,6 @@ def get_whatsapp_profile_dir(modo='gui'):
     profile = os.path.join(base, "perfil_bot_whatsapp")
     os.makedirs(profile, exist_ok=True)
     return profile
-    
-    os.makedirs(profile, exist_ok=True)
-    return profile
 
 def get_chrome_path():
     """

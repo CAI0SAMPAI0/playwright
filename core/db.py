@@ -45,7 +45,7 @@ class SchedulerDB:
             str(self.db_path),
             timeout=60,
             detect_types=sqlite3.PARSE_DECLTYPES,
-            isolation_level="DEFERRED"
+            isolation_level='DEFERRED'
         )
 
         # ===== ATIVA WAL MODE =====
@@ -66,6 +66,9 @@ class SchedulerDB:
         return conn
 
     def _force_sync(self, conn):
+        """
+        Força sincronização do banco de dados WAL
+        """
         try:
             # PASSIVE é suficiente e não bloqueia
             conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
@@ -311,9 +314,9 @@ class SchedulerDB:
         else:
             print(f"[DB] ✓ {cur.rowcount} linha(s) atualizada(s)")
 
-        # ✅ FORÇA SINCRONIZAÇÃO TRIPLA (para garantir)
+        # ✅ Commit e sincronização
+        conn.commit()
         self._force_sync(conn)
-        conn.execute("PRAGMA wal_checkpoint(FULL)")
         conn.close()
 
         # ===== VERIFICAÇÃO PÓS-SYNC =====
