@@ -45,7 +45,7 @@ class SchedulerDB:
             str(self.db_path),
             timeout=60,
             detect_types=sqlite3.PARSE_DECLTYPES,
-            isolation_level=None
+            isolation_level="DEFERRED"
         )
 
         # ===== ATIVA WAL MODE =====
@@ -66,19 +66,12 @@ class SchedulerDB:
         return conn
 
     def _force_sync(self, conn):
-        """
-        ⚠️ NOVO: Força sincronização AGRESSIVA do banco
-        """
         try:
-            # Tenta FULL primeiro (mais garantido)
-            conn.execute("PRAGMA wal_checkpoint(FULL)")
-        except:
-            try:
-                # Se falhar, tenta TRUNCATE
-                conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            except:
-                # Última tentativa: RESTART
-                conn.execute("PRAGMA wal_checkpoint(RESTART)")
+            # PASSIVE é suficiente e não bloqueia
+            conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+        except Exception as e:
+            # Se falhar, apenas loga mas não quebra a execução
+            print(f"[DB] Aviso: Checkpoint falhou: {e}")
 
     def _init_db(self):
         """Cria tabela se não existir"""
@@ -148,7 +141,7 @@ class SchedulerDB:
                 json_path
             ))
 
-            #conn.commit()
+            conn.commit()
             task_id = cur.lastrowid
             self._force_sync(conn)
 
@@ -235,7 +228,7 @@ class SchedulerDB:
                 SET target = ?, mode = ?, message = ?, file_path = ?, scheduled_time = ?, status = 'pending'
                 WHERE id = ?
             """, (target, mode, message, file_path, scheduled_time.isoformat(), task_id))
-            #conn.commit()
+            conn.commit()
             conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
             return True
         except Exception as e:
@@ -367,8 +360,8 @@ class SchedulerDB:
             cur.execute(
                 "DELETE FROM agendamentos WHERE task_name = ?", (identificador,))
 
+        conn.commit()
         self._force_sync(conn)
-        conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
         conn.close()
 
         print(f"✓ Agendamento deletado: {identificador}")
