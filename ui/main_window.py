@@ -1,5 +1,3 @@
-
-
 import os
 import sys
 import traceback
@@ -17,13 +15,24 @@ from tkcalendar import Calendar
 from core.db import db
 from core import automation, windows_scheduler
 from core.automation import contador_execucao 
-from core.paths import get_whatsapp_profile_dir
+from core.paths import get_whatsapp_profile_dir, get_app_base_dir
 
 # --- Constantes ---
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = get_app_base_dir()
 PROFILE_DIR = get_whatsapp_profile_dir()
 THEME_FILE = os.path.join(BASE_DIR, "data", "theme_pref.txt")
 GEOMETRY_FILE = os.path.join(BASE_DIR, "data", "window_pos.txt")
+
+def get_executor_path():
+    """
+    Retorna o caminho correto do executor.py independente de estar empacotado ou não.
+    """
+    if getattr(sys, 'frozen', False):
+        # Executável empacotado: executor.py está em _internal/
+        return Path(sys._MEIPASS) / "executor.py"
+    else:
+        # Desenvolvimento: executor.py está na raiz
+        return Path(BASE_DIR) / "executor.py"
 
 class App(ctk.CTk):
     def __init__(self):
@@ -381,11 +390,8 @@ class App(ctk.CTk):
         with open(json_path, 'w', encoding='utf-8') as f:
             json.dump(task_data, f, ensure_ascii=False, indent=2)
         
-        # Localiza executor
-        if getattr(sys, 'frozen', False):
-            executor_path = Path(sys.executable).parent / "executor.py"
-        else:
-            executor_path = Path(BASE_DIR) / "executor.py"
+        # CORRIGIDO: Usa a função get_executor_path()
+        executor_path = get_executor_path()
         
         if not executor_path.exists():
             messagebox.showerror("Erro", f"executor.py não encontrado em {executor_path}")
@@ -404,15 +410,15 @@ class App(ctk.CTk):
                 stderr=subprocess.PIPE,
                 creationflags=creationflags,
                 cwd=str(BASE_DIR),
-                encoding='utf-8',  # ← Faz communicate() retornar STR
+                encoding='utf-8',
                 errors='replace'
             )
             
-            # ✅ NOVA ABORDAGEM: Thread separada para monitorar
+            # Thread separada para monitorar
             monitor_thread = threading.Thread(
                 target=self._aguardar_processo_em_thread,
                 args=(processo, json_path),
-                daemon=False  # ← NÃO é daemon (aguarda terminar)
+                daemon=False
             )
             monitor_thread.start()
             
@@ -424,7 +430,6 @@ class App(ctk.CTk):
         """
         Roda em thread SEPARADA para não bloquear GUI.
         """
-        # Bloqueia ESTA thread até o processo terminar (GUI continua livre)
         stdout, stderr = processo.communicate()
         retcode = processo.returncode
         
@@ -466,96 +471,6 @@ class App(ctk.CTk):
                 status_file.unlink()
         except Exception as e:
             print(f"[DEBUG] Erro ao limpar: {e}")
-
-    def _monitorar_processo_debug(self, processo, json_path):
-        """
-        Versão CORRIGIDA - sem .decode() em strings.
-        """
-        def check():
-            retcode = processo.poll()
-            
-            if retcode is None:
-                print(f"[DEBUG] Processo ainda rodando... (PID {processo.pid})")
-                self.after(1000, check)
-                return
-            
-            # ===== PROCESSO TERMINOU =====
-            print(f"\n[DEBUG] Processo terminou com código: {retcode}")
-            
-            # FIX: communicate() JÁ retorna strings (por causa de encoding='utf-8' no Popen)
-            stdout, stderr = processo.communicate()
-            
-            print(f"[DEBUG] ===== STDOUT =====")
-            print(stdout if stdout else "(vazio)")
-            
-            print(f"\n[DEBUG] ===== STDERR =====")
-            print(stderr if stderr else "(vazio)")  # ✅ SEM .decode()
-            
-            # Resto do código continua igual...
-            status_file = Path(json_path).with_suffix('.status')
-            
-            if retcode == 0:
-                messagebox.showinfo("Sucesso", "Mensagem enviada!")
-                self._reset_fields()
-                contador_execucao(True)
-                self.atualizar_contador_exibicao()
-            else:
-                erro_msg = "Erro desconhecido"
-                
-                if status_file.exists():
-                    with open(status_file, encoding='utf-8') as f:
-                        erro_msg = f.read()
-                elif stderr:
-                    erro_msg = stderr  # ✅ Já é string
-                
-                messagebox.showerror("Erro", f"Falha no envio:\n\n{erro_msg}")
-            
-            # Limpa arquivos temporários
-            try:
-                json_path.unlink()
-                if status_file.exists():
-                    status_file.unlink()
-            except Exception as e:
-                print(f"[DEBUG] Erro ao limpar temp files: {e}")
-        
-        print(f"[DEBUG] Iniciando monitoramento...")
-        self.after(1000, check)
-
-    def _send_logic(self, target, message, mode):
-        try:
-            from core import automation
-            # Chama a automação (que pode demorar)
-            subprocess.Popen([
-                sys.executable,
-                "executor.py",
-                "--target", target,
-                "--mode", mode,
-                "--message", message
-            ])
-            # Agenda a atualização da UI para rodar na thread principal
-            self.after(0, self._on_send_success)
-        except Exception as e:
-            # 1. Log técnico para VOCÊ (aparece no terminal)
-            print(f"\n--- ERRO CRÍTICO NO WINDOWS 10 ---")
-            traceback.print_exc() 
-            print(f"-----------------------------------\n")
-
-            # 2. Mensagem amigável para ELA (apenas um pop-up centralizado)
-            msg_usuario = (
-                "O perfil do WhatsApp está bloqueado ou o navegador fechou inesperadamente.\n\n"
-                "Solução:\n"
-                "1. Feche qualquer janela do Chrome aberta.\n"
-                "2. Verifique se o bot já não está rodando.\n\n"
-                f"Detalhe técnico: {str(e)[:100]}..." # Mostra só o começo do erro técnico
-            )
-            
-            self.after(0, lambda: messagebox.showerror("Erro de Contexto", msg_usuario))
-
-    def _on_send_success(self):
-        contador_execucao(True)
-        self.atualizar_contador_exibicao()
-        messagebox.showinfo("Sucesso", "Envio realizado com sucesso!")
-        self._reset_fields()
 
     def _schedule_task(self):
         target = self.target_input.get().strip()

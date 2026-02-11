@@ -46,6 +46,27 @@ def limpar_temporarios():
             except Exception as e:
                 print(f"  ✗ {arquivo}: {e}")
 
+def verificar_pastas_essenciais():
+    """Garante que pastas essenciais existem antes do build"""
+    print("\n📁 Verificando estrutura do projeto...")
+    
+    pastas_obrigatorias = ["ui", "core", "data", "resources"]
+    faltando = []
+    
+    for pasta in pastas_obrigatorias:
+        caminho = BASE_DIR / pasta
+        if not caminho.exists():
+            faltando.append(pasta)
+            print(f"  ✗ {pasta}/ - FALTANDO!")
+        else:
+            print(f"  ✓ {pasta}/")
+    
+    if faltando:
+        raise FileNotFoundError(
+            f"Pastas essenciais faltando: {', '.join(faltando)}\n"
+            "Certifique-se de que o projeto está completo antes de compilar."
+        )
+
 def compilar():
     """Executa PyInstaller"""
     print("\n📦 Compilando com PyInstaller...")
@@ -70,6 +91,13 @@ def criar_zip():
     if zip_path.exists():
         zip_path.unlink()
     
+    # Verifica se dist foi criado
+    if not DIST_DIR.exists():
+        raise FileNotFoundError(
+            f"Pasta {DIST_DIR} não foi criada pelo PyInstaller.\n"
+            "Verifique os logs de compilação acima."
+        )
+    
     # Arquivos/pastas a incluir
     items = ["Study_Practices.exe", "_internal"]
     
@@ -82,7 +110,7 @@ def criar_zip():
                 continue
             
             if source.is_file():
-                zipf.write(source, item)
+                zipf.write(source, f"Study_Practices/{item}")
                 print(f"  + {item}")
             else:
                 # Pasta inteira
@@ -90,7 +118,7 @@ def criar_zip():
                 for root, dirs, files in os.walk(source):
                     for file in files:
                         file_path = Path(root) / file
-                        arc_path = file_path.relative_to(DIST_DIR)
+                        arc_path = Path("Study_Practices") / file_path.relative_to(DIST_DIR)
                         zipf.write(file_path, arc_path)
                         total += 1
                 print(f"  + {item}/ ({total} arquivos)")
@@ -105,6 +133,7 @@ def main():
     print("=" * 70)
     
     try:
+        verificar_pastas_essenciais()
         limpar_temporarios()
         compilar()
         criar_zip()
@@ -121,6 +150,8 @@ def main():
     except subprocess.CalledProcessError as e:
         print(f"\n❌ ERRO na compilação: {e}")
         print("Verifique se app.spec está correto")
+    except FileNotFoundError as e:
+        print(f"\n❌ ERRO: {e}")
     except Exception as e:
         print(f"\n❌ ERRO: {e}")
 

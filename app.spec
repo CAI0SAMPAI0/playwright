@@ -1,11 +1,22 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import os
+
+# Inclui apenas pastas que EXISTEM (ignora scheduled_tasks que é criada em runtime)
+datas_list = []
+for folder in ['ui', 'core', 'data', 'resources']:
+    if os.path.exists(folder):
+        datas_list.append((folder, folder))
+
+# CRÍTICO: Adiciona executor.py (necessário para envios manuais e agendados)
+if os.path.exists('executor.py'):
+    datas_list.append(('executor.py', '.'))
 
 a = Analysis(
     ['app.py'],
     pathex=[],
     binaries=[],
-    datas=[('ui', 'ui'), ('core', 'core'), ('data', 'data'), ('resources', 'resources'), ('scheduled_tasks', 'scheduled_tasks')],
+    datas=datas_list,
     hiddenimports=['playwright.sync_api'],
     hookspath=[],
     hooksconfig={},
@@ -44,3 +55,20 @@ coll = COLLECT(
     upx_exclude=[],
     name='Study_Practices',
 )
+
+# ===== REMOVE NAVEGADORES DO PLAYWRIGHT (REDUZ 300+ MB) =====
+import os
+import shutil
+from pathlib import Path
+
+dist_path = Path('dist/Study_Practices/_internal')
+playwright_browsers = dist_path / 'playwright' / 'driver' / 'package' / '.local-browsers'
+
+if playwright_browsers.exists():
+    print(f"\n🗑️  REMOVENDO navegadores do Playwright ({playwright_browsers})...")
+    try:
+        shutil.rmtree(playwright_browsers)
+        print("✅ Navegadores removidos com sucesso! (~300MB economizados)")
+    except Exception as e:
+        print(f"⚠️  Aviso ao remover navegadores: {e}")
+

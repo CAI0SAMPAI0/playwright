@@ -2,6 +2,9 @@
 """
 EXECUTOR ISOLADO - Roda automação em processo separado.
 
+CRÍTICO: Este arquivo NÃO pode importar ou iniciar a GUI.
+Ele deve rodar APENAS a automação do WhatsApp.
+
 Chamado por:
 - GUI (subprocess manual)
 - Task Scheduler (.bat)
@@ -9,13 +12,17 @@ Chamado por:
 
 import sys
 import os
+
+# BLOQUEIO CRÍTICO: Impede que o app.py seja executado
+# Se alguém tentar importar App ou rodar GUI daqui, bloqueia
+os.environ["EXECUTOR_MODE"] = "1"
+
 if sys.platform == 'win32':
     # Python 3.7+: Reconfigura stdout/stderr para UTF-8
     if sys.stdout:
         try:
             sys.stdout.reconfigure(encoding='utf-8')
         except AttributeError:
-            # Fallback para Python < 3.7
             import io
             sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     
@@ -25,14 +32,22 @@ if sys.platform == 'win32':
         except AttributeError:
             import io
             sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 import json
 from pathlib import Path
 from datetime import datetime
 
 # ===== SETUP DE PATHS =====
-BASE_DIR = Path(__file__).parent.absolute()
+if getattr(sys, 'frozen', False):
+    # Executável empacotado
+    BASE_DIR = Path(sys.executable).parent.absolute()
+else:
+    # Desenvolvimento
+    BASE_DIR = Path(__file__).parent.absolute()
+
 sys.path.insert(0, str(BASE_DIR))
 
+# Importações APENAS do core (SEM GUI)
 from core.db import get_db
 from core.automation import executar_envio
 from core.logger import get_logger
@@ -61,6 +76,9 @@ def main(json_path: str):
     
     logger.info("=" * 70)
     logger.info(f"EXECUTOR INICIADO | JSON: {json_path}")
+    logger.info(f"BASE_DIR: {BASE_DIR}")
+    logger.info(f"sys.executable: {sys.executable}")
+    logger.info(f"frozen: {getattr(sys, 'frozen', False)}")
     
     try:
         # ===== CARREGAR DADOS =====
@@ -120,6 +138,8 @@ def main(json_path: str):
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Uso: executor.py <caminho_para_task.json>")
+        print("Este script NÃO deve ser executado diretamente.")
+        print("Use o Study_Practices.exe para interface gráfica.")
         sys.exit(2)
     
     main(sys.argv[1])
