@@ -397,6 +397,13 @@ class App(ctk.CTk):
             messagebox.showerror("Erro", f"executor.py não encontrado em {executor_path}")
             return
         
+        if getattr(sys, 'frozen', False):
+            # No modo .exe, chamamos o próprio executável com a flag que o app.py espera
+            comando = [sys.executable, "--executor-json", str(json_path)]
+        else:
+            # No modo desenvolvimento, chamamos o interpretador + script executor
+            comando = [sys.executable, str(executor_path), str(json_path)]
+        
         # Inicia processo
         try:
             if sys.platform == 'win32':
@@ -405,7 +412,7 @@ class App(ctk.CTk):
                 creationflags = 0
             
             processo = subprocess.Popen(
-                [sys.executable, str(executor_path), str(json_path)],
+                comando,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 creationflags=creationflags,

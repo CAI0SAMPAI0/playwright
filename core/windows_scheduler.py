@@ -29,19 +29,12 @@ def create_task_bat(task_id, task_name, json_config):
     exe_path = Path(sys.executable).absolute()
 
     if getattr(sys, 'frozen', False):
-        # Se for .exe empacotado
-        executor_path = app_path / "executor.py"
+        # Executável único: chama o próprio app em modo executor isolado
+        run_command = f'"{exe_path}" --executor-json "{json_path}"'
     else:
-        # Se for desenvolvimento
+        # Desenvolvimento: chama executor.py diretamente via interpretador
         executor_path = app_path / "executor.py"
-    run_command = f'"{exe_path}" "{executor_path}" "{json_path}"'
-    
-        # Se for o EXE compilado: "app.exe --auto..."
-    #     run_command = f'"{exe_path}" --auto "{json_path}" --task_id {task_id}'
-    # else:
-    #     # Se for rodando via Python: "python.exe app.py --auto..."
-    #     script_path = (app_path / "app.py").absolute()
-    #     run_command = f'"{exe_path}" "{script_path}" --auto "{json_path}" --task_id {task_id}'
+        run_command = f'"{exe_path}" "{executor_path}" "{json_path}"'
     
     bat_content = f"""@echo off
 chcp 65001 >nul
